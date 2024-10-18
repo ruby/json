@@ -269,6 +269,12 @@ public final class Generator {
                 GeneratorState state = session.getState();
                 int depth = state.increaseDepth();
 
+                if (object.isEmpty()) {
+                    buffer.append("[]".getBytes());
+                    state.decreaseDepth();
+                    return;
+                }
+
                 ByteList indentUnit = state.getIndent();
                 byte[] shift = Utils.repeat(indentUnit, depth);
 
@@ -326,6 +332,12 @@ public final class Generator {
                 final Ruby runtime = context.getRuntime();
                 final GeneratorState state = session.getState();
                 final int depth = state.increaseDepth();
+
+                if (object.isEmpty()) {
+                    buffer.append("{}".getBytes());
+                    state.decreaseDepth();
+                    return;
+                }
 
                 final ByteList objectNl = state.getObjectNl();
                 final byte[] indent = Utils.repeat(state.getIndent(), depth);
