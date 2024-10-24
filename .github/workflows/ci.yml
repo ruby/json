@@ -10,7 +10,7 @@ jobs:
     uses: ruby/actions/.github/workflows/ruby_versions.yml@master
     with:
       engine: cruby-jruby
-      min_version: 2.3
+      min_version: 2.7
 
   host:
     needs: ruby-versions
@@ -26,15 +26,15 @@ jobs:
         - windows-latest
         ruby: ${{ fromJson(needs.ruby-versions.outputs.versions) }}
         include:
+        - { os: ubuntu-22.04   , ruby: 2.3      }
+        - { os: macos-13       , ruby: 2.3      }
+        - { os: windows-latest , ruby: 2.3      }
         - { os: windows-latest , ruby: mswin     } # ruby/ruby windows CI
         - { os: ubuntu-latest  , ruby: jruby-9.3 } # Ruby 2.7
         - { os: ubuntu-latest  , ruby: jruby-9.4 } # Ruby 3.1
         - { os: macos-latest   , ruby: truffleruby-head }
         - { os: ubuntu-latest  , ruby: truffleruby-head }
         exclude:
-        - { os: macos-14, ruby: 2.3 }
-        - { os: macos-14, ruby: 2.4 }
-        - { os: macos-14, ruby: 2.5 }
         - { os: windows-latest, ruby: jruby }
         - { os: windows-latest, ruby: jruby-head }
 
@@ -47,8 +47,6 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           apt-get: ragel
           brew: ragel
-          # only needed for Ruby 2.3
-          mingw: ragel
 
       - run: |
           bundle config --without benchmark
