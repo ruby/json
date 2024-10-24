@@ -49,6 +49,7 @@ public class Parser extends RubyObject {
     private RubyString vSource;
     private RubyString createId;
     private boolean createAdditions;
+    private boolean deprecatedCreateAdditions;
     private int maxNesting;
     private boolean allowNaN;
     private boolean symbolizeNames;
@@ -169,7 +170,20 @@ public class Parser extends RubyObject {
         this.symbolizeNames  = opts.getBool("symbolize_names", false);
         this.freeze          = opts.getBool("freeze", false);
         this.createId        = opts.getString("create_id", getCreateId(context));
-        this.createAdditions = opts.getBool("create_additions", false);
+
+        IRubyObject additions = opts.get("create_additions");
+        this.createAdditions = false;
+        this.deprecatedCreateAdditions = false;
+
+        if (additions != null) {
+            if (additions.isNil()) {
+                this.createAdditions = true;
+                this.deprecatedCreateAdditions = true;
+            } else {
+                this.createAdditions = opts.getBool("create_additions", false);
+            }
+        }
+
         this.objectClass     = opts.getClass("object_class", runtime.getHash());
         this.arrayClass      = opts.getClass("array_class", runtime.getArray());
         this.decimalClass    = opts.getClass("decimal_class", null);
@@ -641,6 +655,9 @@ public class Parser extends RubyObject {
                         RubyClass klass = (RubyClass) memoArray[1];
                         if (klass.respondsTo("json_creatable?") &&
                             klass.callMethod(context, "json_creatable?").isTrue()) {
+                            if (parser.deprecatedCreateAdditions) {
+                                klass.getRuntime().getWarnings().warn("JSON.load implicit support for `create_additions: true` is deprecated and will be removed in 3.0, use JSON.unsafe_load or explicitly pass `create_additions: true`");
+                            }
                             result = klass.callMethod(context, "json_create", result);
                         }
                     }
@@ -826,6 +843,9 @@ public class Parser extends RubyObject {
                             callMethod(context, "deep_const_get", vKlassName);
                     if (klass.respondsTo("json_creatable?") &&
                         klass.callMethod(context, "json_creatable?").isTrue()) {
+                        if (parser.deprecatedCreateAdditions) {
+                            klass.getRuntime().getWarnings().warn("JSON.load implicit support for `create_additions: true` is deprecated and will be removed in 3.0, use JSON.unsafe_load or explicitly pass `create_additions: true`");
+                        }
 
                         returnedResult = klass.callMethod(context, "json_create", result);
                     }

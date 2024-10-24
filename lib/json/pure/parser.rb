@@ -90,11 +90,14 @@ module JSON
         @allow_nan = !!opts[:allow_nan]
         @symbolize_names = !!opts[:symbolize_names]
         @freeze = !!opts[:freeze]
-        if opts.key?(:create_additions)
-          @create_additions = !!opts[:create_additions]
-        else
-          @create_additions = false
+
+        @deprecated_create_additions = false
+        @create_additions = opts.fetch(:create_additions, false)
+        if @create_additions.nil?
+          @create_additions = true
+          @deprecated_create_additions = true
         end
+
         @symbolize_names && @create_additions and raise ArgumentError,
           'options :symbolize_names and :create_additions cannot be used '\
           'in conjunction'
@@ -185,8 +188,13 @@ module JSON
 
           if @create_additions and @match_string
             for (regexp, klass) in @match_string
-              klass.json_creatable? or next
-              string =~ regexp and return klass.json_create(string)
+              if klass.json_creatable? and string.match?(regexp)
+                if @deprecated_create_additions
+                  warn "JSON.load implicit support for `create_additions: true` is deprecated and will be removed in 3.0, use JSON.unsafe_load or explicitly pass `create_additions: true`"
+                end
+
+                return klass.json_create(string)
+              end
             end
           end
           string
@@ -308,8 +316,11 @@ module JSON
               raise ParserError, "expected next name, value pair in object at '#{peek(20)}'!"
             end
             if @create_additions and klassname = result[@create_id]
-              klass = JSON.deep_const_get klassname
+              klass = JSON.deep_const_get(klassname)
               break unless klass and klass.json_creatable?
+              if @deprecated_create_additions
+                warn "JSON.load implicit support for `create_additions: true` is deprecated and will be removed in 3.0, use JSON.unsafe_load or explicitly pass `create_additions: true`"
+              end
               result = klass.json_create(result)
             end
             break

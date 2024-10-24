@@ -280,7 +280,7 @@ class JSONGeneratorTest < Test::Unit::TestCase
         end
       EOS
     end
-  end if GC.respond_to?(:stress=)
+  end if GC.respond_to?(:stress=) && RUBY_ENGINE == "ruby"
 
   def test_configure_using_configure_and_merge
     numbered_state = {
