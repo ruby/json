@@ -116,6 +116,8 @@ static void freverse(char *start, char *end)
     }
 }
 
+#define FBUFFER_APPEND_LONG_BUFFER_SIZE 20
+
 static long fltoa(long number, char *buf)
 {
     static char digits[] = "0123456789";
@@ -125,13 +127,14 @@ static long fltoa(long number, char *buf)
     if (sign < 0) number = -number;
     do *tmp++ = digits[number % 10]; while (number /= 10);
     if (sign < 0) *tmp++ = '-';
+    if (tmp > buf + FBUFFER_APPEND_LONG_BUFFER_SIZE) UNREACHABLE;
     freverse(buf, tmp - 1);
     return tmp - buf;
 }
 
 static void fbuffer_append_long(FBuffer *fb, long number)
 {
-    char buf[20];
+    char buf[FBUFFER_APPEND_LONG_BUFFER_SIZE];
     unsigned long len = fltoa(number, buf);
     fbuffer_append(fb, buf, len);
 }
