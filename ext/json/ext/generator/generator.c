@@ -963,6 +963,12 @@ static VALUE cState_generate(VALUE self, VALUE obj)
     return result;
 }
 
+static VALUE cState_initialize(int argc, VALUE *argv, VALUE self)
+{
+    rb_warn("The json gem extension was loaded with the stdlib ruby code. You should upgrade rubygems with `gem update --system`");
+    return self;
+}
+
 /*
  * call-seq: initialize_copy(orig)
  *
@@ -1408,6 +1414,9 @@ void Init_generator(void)
     cState = rb_define_class_under(mGenerator, "State", rb_cObject);
     rb_define_alloc_func(cState, cState_s_allocate);
     rb_define_singleton_method(cState, "from_state", cState_from_state_s, 1);
+    rb_define_method(cState, "initialize", cState_initialize, -1);
+    rb_define_alias(cState, "initialize", "initialize"); // avoid method redefinition warnings
+
     rb_define_method(cState, "initialize_copy", cState_init_copy, 1);
     rb_define_method(cState, "indent", cState_indent, 0);
     rb_define_method(cState, "indent=", cState_indent_set, 1);
@@ -1498,4 +1507,6 @@ void Init_generator(void)
     usascii_encindex = rb_usascii_encindex();
     utf8_encindex = rb_utf8_encindex();
     binary_encindex = rb_ascii8bit_encindex();
+
+    rb_require("json/ext/generator/state");
 }
