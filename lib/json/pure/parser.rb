@@ -148,7 +148,6 @@ module JSON
       end
 
       # Unescape characters in strings.
-      # UNESCAPE_MAP = Hash.new { |h, k| puts; p [:k, k]; h[k] = k.chr }
       UNESCAPE_MAP = {
         '"'  => '"',
         '\\' => '\\',

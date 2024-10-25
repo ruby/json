@@ -1,6 +1,9 @@
 # Changes
 
+### 2024-10-25 (2.7.4)
+
 * Workaround a bug in 3.4.8 and older https://github.com/rubygems/rubygems/pull/6490.
+  This bug would cause some gems with native extension to fail during compilation.
 * Workaround different versions of `json` and `json_pure` being loaded (not officially supported).
 * Make `json_pure` Ractor compatible. 
 
