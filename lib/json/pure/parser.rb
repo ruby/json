@@ -148,25 +148,26 @@ module JSON
       end
 
       # Unescape characters in strings.
-      UNESCAPE_MAP = Hash.new { |h, k| h[k] = k.chr }
-      UNESCAPE_MAP.update({
-        ?"  => '"',
-        ?\\ => '\\',
-        ?/  => '/',
-        ?b  => "\b",
-        ?f  => "\f",
-        ?n  => "\n",
-        ?r  => "\r",
-        ?t  => "\t",
-        ?u  => nil,
-      })
+      # UNESCAPE_MAP = Hash.new { |h, k| puts; p [:k, k]; h[k] = k.chr }
+      UNESCAPE_MAP = {
+        '"'  => '"',
+        '\\' => '\\',
+        '/'  => '/',
+        'b'  => "\b",
+        'f'  => "\f",
+        'n'  => "\n",
+        'r'  => "\r",
+        't'  => "\t",
+        'u'  => nil,
+      }.freeze
 
       STR_UMINUS = ''.respond_to?(:-@)
       def parse_string
         if scan(STRING)
           return '' if self[1].empty?
-          string = self[1].gsub(%r((?:\\[\\bfnrt"/]|(?:\\u(?:[A-Fa-f\d]{4}))+|\\[\x20-\xff]))n) do |c|
-            if u = UNESCAPE_MAP[$&[1]]
+          string = self[1].gsub(%r{(?:\\[\\bfnrt"/]|(?:\\u(?:[A-Fa-f\d]{4}))+|\\[\x20-\xff])}n) do |c|
+            k = $&[1]
+            if u = UNESCAPE_MAP.fetch(k) { k.chr }
               u
             else # \uXXXX
               bytes = ''.b
