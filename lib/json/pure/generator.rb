@@ -239,13 +239,13 @@ module JSON
           end
 
           # NOTE: If adding new instance variables here, check whether #generate should check them for #generate_json
-          @indent                = opts[:indent] if opts.key?(:indent)
-          @space                 = opts[:space] if opts.key?(:space)
-          @space_before          = opts[:space_before] if opts.key?(:space_before)
-          @object_nl             = opts[:object_nl] if opts.key?(:object_nl)
-          @array_nl              = opts[:array_nl] if opts.key?(:array_nl)
-          @allow_nan             = !!opts[:allow_nan] if opts.key?(:allow_nan)
-          @ascii_only            = opts[:ascii_only] if opts.key?(:ascii_only)
+          @indent                = opts[:indent]        || '' if opts.key?(:indent)
+          @space                 = opts[:space]         || '' if opts.key?(:space)
+          @space_before          = opts[:space_before]  || '' if opts.key?(:space_before)
+          @object_nl             = opts[:object_nl]     || '' if opts.key?(:object_nl)
+          @array_nl              = opts[:array_nl]      || '' if opts.key?(:array_nl)
+          @allow_nan             = !!opts[:allow_nan]         if opts.key?(:allow_nan)
+          @ascii_only            = opts[:ascii_only]          if opts.key?(:ascii_only)
           @depth                 = opts[:depth] || 0
           @buffer_initial_length ||= opts[:buffer_initial_length]
 
