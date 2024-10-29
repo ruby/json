@@ -1,5 +1,6 @@
 # Changes
 
+* Fix a memory leak when `#to_json` methods raise an exception.
 * Gracefully handle formatting configs being set to `nil` instead of `""`.
 * Workaround another issue caused by conflicting versions of both `json_pure` and `json` being loaded.
 
