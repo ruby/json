@@ -1470,12 +1470,8 @@ static inline VALUE build_string(const char *start, const char *end, bool intern
     // before deduplication so that it can be interned directly
     // otherwise it would be duplicated first which is wasteful.
     result = rb_funcall(rb_str_freeze(result), i_uminus, 0);
-  # elif STR_UMINUS_DEDUPE
-     // MRI 2.5 and older do not deduplicate strings that are already
-     // frozen.
-     result = rb_funcall(result, i_uminus, 0);
   # else
-     result = rb_str_freeze(result);
+    result = rb_funcall(result, i_uminus, 0);
   # endif
       }
 # endif
