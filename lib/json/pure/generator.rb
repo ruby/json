@@ -301,19 +301,30 @@ module JSON
 
         # Handles @allow_nan, @buffer_initial_length, other ivars must be the default value (see above)
         private def generate_json(obj, buf)
-          case obj
-          when Hash
+          klass = obj.class
+          if klass == Hash
             buf << '{'
             first = true
             obj.each_pair do |k,v|
               buf << ',' unless first
-              fast_serialize_string(k.to_s, buf)
+
+              key_str = k.to_s
+              if key_str.is_a?(::String)
+                if key_str.class == ::String
+                  fast_serialize_string(key_str, buf)
+                else
+                  generate_json(key_str, buf)
+                end
+              else
+                raise TypeError, "#{k.class}#to_s returns an instance of #{key_str.class}, expected a String"
+              end
+
               buf << ':'
               generate_json(v, buf)
               first = false
             end
             buf << '}'
-          when Array
+          elsif klass == Array
             buf << '['
             first = true
             obj.each do |e|
@@ -322,9 +333,9 @@ module JSON
               first = false
             end
             buf << ']'
-          when String
+          elsif klass == String
             fast_serialize_string(obj, buf)
-          when Integer
+          elsif klass == Integer
             buf << obj.to_s
           else
             # Note: Float is handled this way since Float#to_s is slow anyway
@@ -414,7 +425,15 @@ module JSON
             each { |key, value|
               result << delim unless first
               result << state.indent * depth if indent
-              result = +"#{result}#{key.to_s.to_json(state)}#{state.space_before}:#{state.space}"
+
+              key_str = key.to_s
+              key_json = if key_str.is_a?(::String)
+                key_str = key_str.to_json(state)
+              else
+                raise TypeError, "#{key.class}#to_s returns an instance of #{key_str.class}, expected a String"
+              end
+
+              result = +"#{result}#{key_json}#{state.space_before}:#{state.space}"
               if state.strict? && !(false == value || true == value || nil == value || String === value || Array === value || Hash === value || Integer === value || Float === value)
                 raise GeneratorError, "#{value.class} not allowed in JSON"
               elsif value.respond_to?(:to_json)

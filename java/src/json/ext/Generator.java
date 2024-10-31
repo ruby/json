@@ -347,7 +347,14 @@ public final class Generator {
                         }
                         if (objectNl.length() != 0) buffer.append(indent);
 
-                        STRING_HANDLER.generate(session, key.asString(), buffer);
+                        IRubyObject keyStr = key.callMethod(context, "to_s");
+                        if (keyStr.getMetaClass() == runtime.getString()) {
+                            STRING_HANDLER.generate(session, (RubyString)keyStr, buffer);
+                        } else {
+                            Utils.ensureString(keyStr);
+                            Handler<IRubyObject> keyHandler = (Handler<IRubyObject>) getHandlerFor(runtime, keyStr);
+                            keyHandler.generate(session, keyStr, buffer);
+                        }
                         session.infectBy(key);
 
                         buffer.append(spaceBefore);

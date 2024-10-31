@@ -479,6 +479,56 @@ EOT
     end
   end
 
+  class MyCustomString < String
+    def to_json(_state = nil)
+      '"my_custom_key"'
+    end
+
+    def to_s
+      self
+    end
+  end
+
+  def test_string_subclass_as_keys
+    # Ref: https://github.com/ruby/json/issues/667
+    # if key.to_s doesn't return a bare string, we call `to_json` on it.
+    key = MyCustomString.new("won't be used")
+    assert_equal '{"my_custom_key":1}', JSON.generate(key => 1)
+  end
+
+  class FakeString
+    def to_json(_state = nil)
+      raise "Shouldn't be called"
+    end
+
+    def to_s
+      self
+    end
+  end
+
+  def test_custom_object_as_keys
+    key = FakeString.new
+    error = assert_raise(TypeError) do
+      JSON.generate(key => 1)
+    end
+    assert_match "FakeString", error.message
+  end
+
+  def test_to_json_called_with_state_object
+    object = Object.new
+    called = false
+    argument = nil
+    object.singleton_class.define_method(:to_json) do |state|
+      called = true
+      argument = state
+      "<hello>"
+    end
+
+    assert_equal "<hello>", JSON.dump(object)
+    assert called, "#to_json wasn't called"
+    assert_instance_of JSON::State, argument
+  end
+
   if defined?(JSON::Ext::Generator) and RUBY_PLATFORM != "java"
     def test_valid_utf8_in_different_encoding
       utf8_string = "€™"

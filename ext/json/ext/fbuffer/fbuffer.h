@@ -36,6 +36,10 @@ static VALUE fbuffer_to_s(FBuffer *fb);
 #define RB_UNLIKELY(expr) expr
 #endif
 
+#ifndef RB_LIKELY
+#define RB_LIKELY(expr) expr
+#endif
+
 static FBuffer *fbuffer_alloc(unsigned long initial_length)
 {
     FBuffer *fb;

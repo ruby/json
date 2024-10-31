@@ -1,5 +1,7 @@
 # Changes
 
+* Fix a regression in JSON.generate when dealing with Hash keys that are string subclasses, call `to_json` on them.
+
 ### 2024-10-25 (2.7.5)
 
 * Fix a memory leak when `#to_json` methods raise an exception.
