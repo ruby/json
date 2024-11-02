@@ -2,6 +2,7 @@
 #define _PARSER_H_
 
 #include "ruby.h"
+#include "name_cache.h"
 
 /* This is the fallback definition from Ruby 3.4 */
 #ifndef RBIMPL_STDBOOL_H
@@ -42,6 +43,7 @@ typedef struct JSON_ParserStruct {
     bool freeze;
     bool create_additions;
     bool deprecated_create_additions;
+    rstring_cache name_cache;
 } JSON_Parser;
 
 #define GET_PARSER                          \
@@ -61,7 +63,7 @@ static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *resul
 static char *JSON_parse_integer(JSON_Parser *json, char *p, char *pe, VALUE *result);
 static char *JSON_parse_float(JSON_Parser *json, char *p, char *pe, VALUE *result);
 static char *JSON_parse_array(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting);
-static VALUE json_string_unescape(char *string, char *stringEnd, bool intern, bool symbolize);
+static VALUE json_string_unescape(JSON_Parser *json, char *string, char *stringEnd, bool is_name, bool intern, bool symbolize);
 static char *JSON_parse_string(JSON_Parser *json, char *p, char *pe, VALUE *result);
 static VALUE convert_encoding(VALUE source);
 static VALUE cParser_initialize(int argc, VALUE *argv, VALUE self);

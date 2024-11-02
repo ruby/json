@@ -489,7 +489,7 @@ static inline VALUE build_string(const char *start, const char *end, bool intern
     return result;
 }
 
-static VALUE json_string_unescape(char *string, char *stringEnd, bool intern, bool symbolize)
+static VALUE json_string_unescape(JSON_Parser *json, char *string, char *stringEnd, bool is_name, bool intern, bool symbolize)
 {
     size_t bufferSize = stringEnd - string;
     char *p = string, *pe = string, *unescape, *bufferStart, *buffer;
@@ -498,6 +498,9 @@ static VALUE json_string_unescape(char *string, char *stringEnd, bool intern, bo
 
     pe = memchr(p, '\\', bufferSize);
     if (RB_LIKELY(pe == NULL)) {
+        if (is_name && !symbolize) { // TODO: handle symbols
+            return rstring_cache_fetch(&json->name_cache, string, stringEnd - string);
+        }
         return build_string(string, stringEnd, intern, symbolize);
     }
 
@@ -604,7 +607,7 @@ static VALUE json_string_unescape(char *string, char *stringEnd, bool intern, bo
     write data;
 
     action parse_string {
-        *result = json_string_unescape(json->memo + 1, p, json->parsing_name || json-> freeze, json->parsing_name && json->symbolize_names);
+        *result = json_string_unescape(json, json->memo + 1, p, json->parsing_name, json->parsing_name || json-> freeze, json->parsing_name && json->symbolize_names);
         if (NIL_P(*result)) {
             fhold;
             fbreak;
