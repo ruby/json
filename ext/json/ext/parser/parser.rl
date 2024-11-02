@@ -1,6 +1,165 @@
 #include "../fbuffer/fbuffer.h"
 #include "parser.h"
 
+static VALUE mJSON, mExt, cParser, eNestingError, Encoding_UTF_8;
+static VALUE CNaN, CInfinity, CMinusInfinity;
+
+static ID i_json_creatable_p, i_json_create, i_create_id,
+          i_chr, i_deep_const_get, i_match, i_aset, i_aref,
+          i_leftshift, i_new, i_try_convert, i_uminus, i_encode;
+
+static VALUE sym_max_nesting, sym_allow_nan, sym_symbolize_names, sym_freeze,
+             sym_create_additions, sym_create_id, sym_object_class, sym_array_class,
+             sym_decimal_class, sym_match_string;
+
+static int binary_encindex;
+static int utf8_encindex;
+
+/* name cache */
+
+#include <string.h>
+#include <ctype.h>
+
+static rb_encoding *enc_utf8;
+
+#define JSON_RVALUE_CACHE_MAX_ENTRY_LENGTH 55
+
+static inline VALUE build_interned_string(const char *str, const long length)
+{
+# ifdef HAVE_RB_ENC_INTERNED_STR
+    return rb_enc_interned_str(str, length, enc_utf8);
+# else
+    VALUE rstring = rb_utf8_str_new(str, length);
+    return rb_funcall(rb_str_freeze(rstring), i_uminus, 0);
+# endif
+}
+
+static inline VALUE build_symbol(const char *str, const long length)
+{
+    return rb_str_intern(build_interned_string(str, length));
+}
+
+static void rvalue_cache_insert_at(rvalue_cache *cache, int index, VALUE rstring)
+{
+    MEMMOVE(&cache->entries[index + 1], &cache->entries[index], VALUE, cache->length - index);
+    cache->length++;
+    cache->entries[index] = rstring;
+}
+
+static inline int rstring_cache_cmp(const char *str, const long length, VALUE rstring)
+{
+    long rstring_length = RSTRING_LEN(rstring);
+    if (length == rstring_length) {
+        return memcmp(str, RSTRING_PTR(rstring), length);
+    } else {
+        return (int)(length - rstring_length);
+    }
+}
+
+static VALUE rstring_cache_fetch(rvalue_cache *cache, const char *str, const long length)
+{
+    if (RB_UNLIKELY(length > JSON_RVALUE_CACHE_MAX_ENTRY_LENGTH)) {
+        // Common names aren't likely to be very long. So we just don't
+        // cache names above an arbitrary threshold.
+        return Qfalse;
+    }
+
+    if (RB_UNLIKELY(!isalpha(str[0]))) {
+        // Simple heuristic, if the first character isn't a letter,
+        // we're much less likely to see this string again.
+        // We mostly want to cache strings that are likely to be repeated.
+        return Qfalse;
+    }
+
+    int low = 0;
+    int high = cache->length - 1;
+    int mid = 0;
+    int last_cmp = 0;
+
+    while (low <= high) {
+        mid = (high + low) / 2;
+        VALUE entry = cache->entries[mid];
+        last_cmp = rstring_cache_cmp(str, length, entry);
+
+        if (last_cmp == 0) {
+            return entry;
+        } else if (last_cmp > 0) {
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    if (RB_UNLIKELY(memchr(str, '\\', length))) {
+        // We assume the overwhelming majority of names don't need to be escaped.
+        // But if they do, we have to fallback to the slow path.
+        return Qfalse;
+    }
+
+    VALUE rstring = build_interned_string(str, length);
+
+    if (cache->length < JSON_RVALUE_CACHE_CAPA) {
+        if (last_cmp > 0) {
+            mid += 1;
+        }
+
+        rvalue_cache_insert_at(cache, mid, rstring);
+    }
+    return rstring;
+}
+
+static VALUE rsymbol_cache_fetch(rvalue_cache *cache, const char *str, const long length)
+{
+    if (RB_UNLIKELY(length > JSON_RVALUE_CACHE_MAX_ENTRY_LENGTH)) {
+        // Common names aren't likely to be very long. So we just don't
+        // cache names above an arbitrary threshold.
+        return Qfalse;
+    }
+
+    if (RB_UNLIKELY(!isalpha(str[0]))) {
+        // Simple heuristic, if the first character isn't a letter,
+        // we're much less likely to see this string again.
+        // We mostly want to cache strings that are likely to be repeated.
+        return Qfalse;
+    }
+
+    int low = 0;
+    int high = cache->length - 1;
+    int mid = 0;
+    int last_cmp = 0;
+
+    while (low <= high) {
+        mid = (high + low) / 2;
+        VALUE entry = cache->entries[mid];
+        last_cmp = rstring_cache_cmp(str, length, rb_sym2str(entry));
+
+        if (last_cmp == 0) {
+            return entry;
+        } else if (last_cmp > 0) {
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    if (RB_UNLIKELY(memchr(str, '\\', length))) {
+        // We assume the overwhelming majority of names don't need to be escaped.
+        // But if they do, we have to fallback to the slow path.
+        return Qfalse;
+    }
+
+    VALUE rsymbol = build_symbol(str, length);
+
+    if (cache->length < JSON_RVALUE_CACHE_CAPA) {
+        if (last_cmp > 0) {
+            mid += 1;
+        }
+
+        rvalue_cache_insert_at(cache, mid, rsymbol);
+    }
+    return rsymbol;
+}
+
 /* unicode */
 
 static const signed char digit_values[256] = {
@@ -84,22 +243,8 @@ static void raise_parse_error(const char *format, const char *start)
         ptr = buffer;
     }
 
-    rb_enc_raise(rb_utf8_encoding(), rb_path2class("JSON::ParserError"), format, ptr);
+    rb_enc_raise(enc_utf8, rb_path2class("JSON::ParserError"), format, ptr);
 }
-
-static VALUE mJSON, mExt, cParser, eNestingError, Encoding_UTF_8;
-static VALUE CNaN, CInfinity, CMinusInfinity;
-
-static ID i_json_creatable_p, i_json_create, i_create_id,
-          i_chr, i_deep_const_get, i_match, i_aset, i_aref,
-          i_leftshift, i_new, i_try_convert, i_uminus, i_encode;
-
-static VALUE sym_max_nesting, sym_allow_nan, sym_symbolize_names, sym_freeze,
-             sym_create_additions, sym_create_id, sym_object_class, sym_array_class,
-             sym_decimal_class, sym_match_string;
-
-static int binary_encindex;
-static int utf8_encindex;
 
 
 %%{
@@ -471,7 +616,7 @@ static inline VALUE build_string(const char *start, const char *end, bool intern
     VALUE result;
 # ifdef HAVE_RB_ENC_INTERNED_STR
     if (intern) {
-      result = rb_enc_interned_str(start, (long)(end - start), rb_utf8_encoding());
+      result = rb_enc_interned_str(start, (long)(end - start), enc_utf8);
     } else {
       result = rb_utf8_str_new(start, (long)(end - start));
     }
@@ -496,11 +641,21 @@ static VALUE json_string_unescape(JSON_Parser *json, char *string, char *stringE
     int unescape_len;
     char buf[4];
 
+    if (is_name) {
+        VALUE cached_key;
+        if (RB_UNLIKELY(symbolize)) {
+            cached_key = rsymbol_cache_fetch(&json->name_cache, string, bufferSize);
+        } else {
+            cached_key = rstring_cache_fetch(&json->name_cache, string, bufferSize);
+        }
+
+        if (RB_LIKELY(cached_key)) {
+            return cached_key;
+        }
+    }
+
     pe = memchr(p, '\\', bufferSize);
     if (RB_LIKELY(pe == NULL)) {
-        if (is_name && !symbolize) { // TODO: handle symbols
-            return rstring_cache_fetch(&json->name_cache, string, stringEnd - string);
-        }
         return build_string(string, stringEnd, intern, symbolize);
     }
 
@@ -974,6 +1129,7 @@ void Init_parser(void)
 
     binary_encindex = rb_ascii8bit_encindex();
     utf8_encindex = rb_utf8_encindex();
+    enc_utf8 = rb_utf8_encoding();
 }
 
 /*

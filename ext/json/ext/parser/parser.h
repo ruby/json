@@ -2,7 +2,6 @@
 #define _PARSER_H_
 
 #include "ruby.h"
-#include "name_cache.h"
 
 /* This is the fallback definition from Ruby 3.4 */
 #ifndef RBIMPL_STDBOOL_H
@@ -25,6 +24,19 @@ typedef unsigned char _Bool;
 # define MAYBE_UNUSED(x) x
 #endif
 
+// Object names are likely to be repeated, and are frozen.
+// As such we can re-use them if we keep a cache of the ones we've seen so far,
+// and save much more expensive lookups into the global fstring table.
+// This cache implementation is deliberately simple, as we're optimizing for compactness,
+// to be able to fit safely on the stack.
+// As such, binary search into a sorted array gives a good tradeoff between compactness and
+// performance.
+#define JSON_RVALUE_CACHE_CAPA 63
+typedef struct rvalue_cache_struct {
+    int length;
+    VALUE entries[JSON_RVALUE_CACHE_CAPA];
+} rvalue_cache;
+
 typedef struct JSON_ParserStruct {
     VALUE Vsource;
     char *source;
@@ -43,7 +55,7 @@ typedef struct JSON_ParserStruct {
     bool freeze;
     bool create_additions;
     bool deprecated_create_additions;
-    rstring_cache name_cache;
+    rvalue_cache name_cache;
 } JSON_Parser;
 
 #define GET_PARSER                          \
