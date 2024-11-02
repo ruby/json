@@ -36,7 +36,14 @@ static void rstring_cache_insert_at(rstring_cache *cache, int index, VALUE rstri
 static VALUE rstring_cache_fetch(rstring_cache *cache, const char *str, const long length)
 {
     if (RB_UNLIKELY(length > JSON_RSTRING_CACHE_MAX_ENTRY_LENGTH)) {
-        rb_enc_interned_str(str, length, rb_utf8_encoding());
+        return rb_enc_interned_str(str, length, rb_utf8_encoding());
+    }
+
+    if (RB_UNLIKELY(!isalpha(str[0]))) {
+        // Simple heuristic, if the first character isn't a letter,
+        // we're much less likely to see this string again.
+        // We mostly want to cache strings that are likely to be repeated.
+        return rb_str_freeze(rb_utf8_str_new(str, length));
     }
 
     int low = 0;
