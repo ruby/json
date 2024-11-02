@@ -50,19 +50,17 @@ static VALUE rstring_cache_fetch(rstring_cache *cache, const char *str, const lo
     int high = cache->length - 1;
     int mid = 0;
     int last_cmp = 0;
-    if (cache->length) {
-        while (low <= high) {
-            mid = (high + low) / 2;
-            VALUE entry = cache->entries[mid];
-            last_cmp = rstring_cache_cmp(str, length, entry);
+    while (low <= high) {
+        mid = (high + low) / 2;
+        VALUE entry = cache->entries[mid];
+        last_cmp = rstring_cache_cmp(str, length, entry);
 
-            if (last_cmp == 0) {
-                return entry;
-            } else if (last_cmp > 0) {
-                low = mid + 1;
-            } else {
-                high = mid - 1;
-            }
+        if (last_cmp == 0) {
+            return entry;
+        } else if (last_cmp > 0) {
+            low = mid + 1;
+        } else {
+            high = mid - 1;
         }
     }
 
