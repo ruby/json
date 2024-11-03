@@ -518,7 +518,7 @@ EOT
     object = Object.new
     called = false
     argument = nil
-    object.singleton_class.define_method(:to_json) do |state|
+    object.singleton_class.send(:define_method, :to_json) do |state|
       called = true
       argument = state
       "<hello>"
