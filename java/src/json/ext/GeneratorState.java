@@ -225,7 +225,10 @@ public class GeneratorState extends RubyObject {
     public IRubyObject generate(ThreadContext context, IRubyObject obj) {
         RubyString result = Generator.generateJson(context, obj, this);
         RuntimeInfo info = RuntimeInfo.forRuntime(context.getRuntime());
-        result.force_encoding(context, info.utf8.get());
+        if (result.encoding(context) != info.utf8.get()) {
+            result = (RubyString)result.dup();
+            result.force_encoding(context, info.utf8.get());
+        }
         return result;
     }
 
