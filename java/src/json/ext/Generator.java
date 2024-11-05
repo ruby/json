@@ -17,6 +17,7 @@ import org.jruby.RubyString;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
+import org.jruby.exceptions.RaiseException;
 
 public final class Generator {
     private Generator() {
@@ -390,14 +391,19 @@ public final class Generator {
                 RuntimeInfo info = session.getInfo();
                 RubyString src;
 
-                if (object.encoding(session.getContext()) != info.utf8.get()) {
-                    src = (RubyString)object.encode(session.getContext(),
-                                                    info.utf8.get());
-                } else {
-                    src = object;
-                }
+                try {
+                    if (object.encoding(session.getContext()) != info.utf8.get()) {
+                        src = (RubyString)object.encode(session.getContext(),
+                                                        info.utf8.get());
+                    } else {
+                        src = object;
+                    }
 
-                session.getStringEncoder().encode(src.getByteList(), buffer);
+                    session.getStringEncoder().encode(src.getByteList(), buffer);
+                } catch (RaiseException re) {
+                  throw Utils.newException(session.getContext(), Utils.M_GENERATOR_ERROR,
+                   re.getMessage());
+                }
             }
         };
 
