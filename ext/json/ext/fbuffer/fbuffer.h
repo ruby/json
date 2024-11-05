@@ -46,6 +46,7 @@ typedef struct FBufferStruct {
     unsigned long len;
     unsigned long capa;
     char *ptr;
+    VALUE io;
 } FBuffer;
 
 #define FBUFFER_STACK_SIZE 512
@@ -66,7 +67,7 @@ static void fbuffer_append_long(FBuffer *fb, long number);
 #endif
 static inline void fbuffer_append_char(FBuffer *fb, char newchr);
 #ifdef JSON_GENERATOR
-static VALUE fbuffer_to_s(FBuffer *fb);
+static VALUE fbuffer_finalize(FBuffer *fb);
 #endif
 
 static void fbuffer_stack_init(FBuffer *fb, unsigned long initial_length, char *stack_buffer, long stack_buffer_size)
@@ -86,15 +87,26 @@ static void fbuffer_free(FBuffer *fb)
     }
 }
 
-#ifndef JSON_GENERATOR
 static void fbuffer_clear(FBuffer *fb)
 {
     fb->len = 0;
 }
-#endif
+
+static void fbuffer_flush(FBuffer *fb)
+{
+    rb_io_write(fb->io, rb_utf8_str_new(fb->ptr, fb->len));
+    fbuffer_clear(fb);
+}
 
 static void fbuffer_do_inc_capa(FBuffer *fb, unsigned long requested)
 {
+    if (RB_UNLIKELY(fb->io)) {
+        fbuffer_flush(fb);
+        if (RB_LIKELY(requested < fb->capa)) {
+            return;
+        }
+    }
+
     unsigned long required;
 
     if (RB_UNLIKELY(!fb->ptr)) {
@@ -174,11 +186,18 @@ static void fbuffer_append_long(FBuffer *fb, long number)
     fbuffer_append(fb, buffer_end - len, len);
 }
 
-static VALUE fbuffer_to_s(FBuffer *fb)
+static VALUE fbuffer_finalize(FBuffer *fb)
 {
-    VALUE result = rb_utf8_str_new(FBUFFER_PTR(fb), FBUFFER_LEN(fb));
-    fbuffer_free(fb);
-    return result;
+    if (fb->io) {
+        fbuffer_flush(fb);
+        fbuffer_free(fb);
+        rb_io_flush(fb->io);
+        return fb->io;
+    } else {
+        VALUE result = rb_utf8_str_new(FBUFFER_PTR(fb), FBUFFER_LEN(fb));
+        fbuffer_free(fb);
+        return result;
+    }
 }
 #endif
 #endif
