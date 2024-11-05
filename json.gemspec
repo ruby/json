@@ -45,7 +45,11 @@ spec = Gem::Specification.new do |s|
     "LEGAL",
     "README.md",
     "json.gemspec",
-    *Dir["lib/**/*.rb"],
+    *(
+      Dir["lib/**/*.rb"] -
+      # We keep lib/json/pure/*.rb on purpose for TruffleRuby, but not the entry points.
+      Dir["lib/json/pure.rb"] - Dir["lib/json_pure.rb"]
+    ),
   ]
 
   if java_ext

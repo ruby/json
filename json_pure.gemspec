@@ -16,6 +16,7 @@ Gem::Specification.new do |s|
 
   s.extra_rdoc_files = ["README.md"]
   s.rdoc_options = ["--title", "JSON implementation for ruby", "--main", "README.md"]
+
   s.files = [
     "CHANGES.md",
     "COPYING",
@@ -23,29 +24,9 @@ Gem::Specification.new do |s|
     "LEGAL",
     "README.md",
     "json_pure.gemspec",
-    "lib/json.rb",
-    "lib/json/add/bigdecimal.rb",
-    "lib/json/add/complex.rb",
-    "lib/json/add/core.rb",
-    "lib/json/add/date.rb",
-    "lib/json/add/date_time.rb",
-    "lib/json/add/exception.rb",
-    "lib/json/add/ostruct.rb",
-    "lib/json/add/range.rb",
-    "lib/json/add/rational.rb",
-    "lib/json/add/regexp.rb",
-    "lib/json/add/set.rb",
-    "lib/json/add/struct.rb",
-    "lib/json/add/symbol.rb",
-    "lib/json/add/time.rb",
-    "lib/json/common.rb",
-    "lib/json/ext.rb",
-    "lib/json/generic_object.rb",
-    "lib/json/pure.rb",
-    "lib/json/pure/generator.rb",
-    "lib/json/pure/parser.rb",
-    "lib/json/version.rb",
+    *(Dir["lib/**/*.rb"] - Dir["lib/json/ext/**/*.rb"]),
   ]
+
   s.homepage = "https://ruby.github.io/json"
   s.metadata = {
     'bug_tracker_uri'   => 'https://github.com/ruby/json/issues',

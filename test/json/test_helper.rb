@@ -1,23 +1,39 @@
+# frozen_string_literal: true
+
 case ENV['JSON']
 when 'pure'
   $LOAD_PATH.unshift(File.expand_path('../../../lib', __FILE__))
-  $stderr.puts("Testing JSON::Pure")
   require 'json/pure'
+  begin
+    require 'json/ext'
+  rescue LoadError
+    # Ensure `json/ext` can't be loaded after `json/pure`
+  end
+  if [JSON.generator, JSON.parser].map(&:name) != ["JSON::Pure::Generator", "JSON::Pure::Parser"]
+    abort "Expected JSON::Pure to be loaded, got: #{[JSON.generator, JSON.parser]}"
+  end
 when 'ext'
-  $stderr.puts("Testing JSON::Ext")
   $LOAD_PATH.unshift(File.expand_path('../../../ext', __FILE__), File.expand_path('../../../lib', __FILE__))
   require 'json/ext'
+  require 'json/pure'
+
+  expected = if RUBY_ENGINE == 'truffleruby'
+    ["JSON::Pure::Generator", "JSON::Ext::Parser"]
+  else
+    ["JSON::Ext::Generator", "JSON::Ext::Parser"]
+  end
+
+  if [JSON.generator, JSON.parser].map(&:name) != expected
+    abort "Expected JSON::Ext to be loaded, got: #{[JSON.generator, JSON.parser]}"
+  end
 else
   $LOAD_PATH.unshift(File.expand_path('../../../ext', __FILE__), File.expand_path('../../../lib', __FILE__))
-  $stderr.puts("Testing JSON")
   require 'json'
 end
 
+$stderr.puts("Testing #{JSON.generator} and #{JSON.parser}")
+
 require 'test/unit'
-begin
-  require 'byebug'
-rescue LoadError
-end
 
 if GC.respond_to?(:verify_compaction_references)
   # This method was added in Ruby 3.0.0. Calling it this way asks the GC to

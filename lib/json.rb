@@ -1,5 +1,4 @@
 # frozen_string_literal: true
-require 'json/common'
 
 ##
 # = JavaScript \Object Notation (\JSON)
@@ -582,11 +581,11 @@ require 'json/common'
 #     With custom addition:     #<Foo:0x0000000006473bb8 @bar=0, @baz=1> (Foo)
 #
 module JSON
-  require 'json/version'
+  require_relative 'version'
 
   begin
-    require 'json/ext'
+    require_relative 'ext'
   rescue LoadError
-    require 'json/pure'
+    require_relative 'pure'
   end
 end

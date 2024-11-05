@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 begin
   require 'rubygems/package_task'
 rescue LoadError
