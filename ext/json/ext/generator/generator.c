@@ -954,6 +954,10 @@ static VALUE generate_json_rescue(VALUE d, VALUE exc)
     struct generate_json_data *data = (struct generate_json_data *)d;
     fbuffer_free(data->buffer);
 
+    if (RBASIC_CLASS(exc) == rb_path2class("Encoding::UndefinedConversionError")) {
+        exc = rb_exc_new_str(eGeneratorError, rb_funcall(exc, rb_intern("message"), 0));
+    }
+
     rb_exc_raise(exc);
 
     return Qundef;

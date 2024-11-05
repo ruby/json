@@ -347,7 +347,11 @@ module JSON
         if Regexp.method_defined?(:match?)
           private def fast_serialize_string(string, buf) # :nodoc:
             buf << '"'
-            string = string.encode(::Encoding::UTF_8) unless string.encoding == ::Encoding::UTF_8
+            begin
+              string = string.encode(::Encoding::UTF_8) unless string.encoding == ::Encoding::UTF_8
+            rescue Encoding::UndefinedConversionError => error
+              raise GeneratorError, error.message
+            end
             raise GeneratorError, "source sequence is illegal/malformed utf-8" unless string.valid_encoding?
 
             if /["\\\x0-\x1f]/n.match?(string)
@@ -536,7 +540,11 @@ module JSON
               end
               string = self
             else
-              string = encode(::Encoding::UTF_8)
+              begin
+                string = encode(::Encoding::UTF_8)
+              rescue Encoding::UndefinedConversionError => error
+                raise GeneratorError, error.message
+              end
             end
             if state.ascii_only?
               %("#{JSON.utf8_to_json_ascii(string, state.script_safe)}")

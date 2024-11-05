@@ -470,12 +470,20 @@ EOT
     end
     assert_includes error.message, "source sequence is illegal/malformed utf-8"
 
-    assert_raise(Encoding::UndefinedConversionError) do
+    assert_raise(JSON::GeneratorError) do
+      JSON.dump("\x82\xAC\xEF".b)
+    end
+
+    assert_raise(JSON::GeneratorError) do
       "\x82\xAC\xEF".b.to_json
     end
 
-    assert_raise(Encoding::UndefinedConversionError) do
-      JSON.dump("\x82\xAC\xEF".b)
+    assert_raise(JSON::GeneratorError) do
+      ["\x82\xAC\xEF".b].to_json
+    end
+
+    assert_raise(JSON::GeneratorError) do
+      { foo: "\x82\xAC\xEF".b }.to_json
     end
   end
 
