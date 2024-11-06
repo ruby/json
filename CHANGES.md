@@ -1,5 +1,7 @@
 # Changes
 
+* Fix the java packages to include the extension.
+
 ### 2024-11-06 (2.8.0)
 
 * Emit a deprecation warning when `JSON.load` create custom types without the `create_additions` option being explictly enabled.
