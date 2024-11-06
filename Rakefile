@@ -30,7 +30,7 @@ PKG_VERSION       = File.foreach(File.join(__dir__, "lib/json/version.rb")) do |
   /^\s*VERSION\s*=\s*'(.*)'/ =~ line and break $1
 end rescue nil
 
-EXT_ROOT_DIR      = 'ext/json/ext'
+EXT_ROOT_DIR      = 'ext/json'
 EXT_PARSER_DIR    = "#{EXT_ROOT_DIR}/parser"
 EXT_PARSER_DL     = "#{EXT_PARSER_DIR}/parser.#{CONFIG['DLEXT']}"
 RAGEL_PATH        = "#{EXT_PARSER_DIR}/parser.rl"
