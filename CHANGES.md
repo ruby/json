@@ -1,12 +1,15 @@
 # Changes
 
-### UNRELEASED
+### 2024-11-06 (2.8.0)
 
 * Emit a deprecation warning when `JSON.load` create custom types without the `create_additions` option being explictly enabled.
   * Prefer to use `JSON.unsafe_load(string)` or `JSON.load(string, create_additions: true)`.
 * Emit a deprecation warning when serializing valid UTF-8 strings encoded in `ASCII_8BIT` aka `BINARY`.
-* Bump required_ruby_version to 2.7.
-* More performance improvments to `JSON.dump` and `JSON.generate`.
+* Bump required Ruby version to 2.7.
+* Add support for optionally parsing trailing commas, via `allow_trailing_comma: true`, which in cunjunction with the
+  pre-existing support for comments, make it suitable to parse `jsonc` documents.
+* Many performance improvements to `JSON.parse` and `JSON.load`, up to `1.7x` faster on real world documents.
+* Some minor performance improvements to `JSON.dump` and `JSON.generate`.
 
 ### 2024-11-04 (2.7.6)
 
