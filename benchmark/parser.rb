@@ -28,27 +28,26 @@ end
 
 # NB: Notes are based on ruby 3.3.4 (2024-07-09 revision be1089c8ec) +YJIT [arm64-darwin23]
 
-# Oj::Parser is very significanly faster (1.80x) on the nested array benchmark.
-benchmark_parsing "small nested array", JSON.dump([[1,2,3,4,5]]*10)
-
-# Oj::Parser is significanly faster (~1.5x) on the next 4 benchmarks in large part because its
+# Oj::Parser is significanly faster (~1.3x) on the next 3 micro-benchmarks in large part because its
 # cache is persisted across calls. That's not something we can do with the current API, we'd
 # need to expose a stateful API as well, but that's no really desirable.
-# Other than that we're faster than regular `Oj.load` by a good margin.
+# Other than that we're faster than regular `Oj.load` by a good margin (between 1.3x and 2.4x).
+benchmark_parsing "small nested array", JSON.dump([[1,2,3,4,5]]*10)
 benchmark_parsing "small hash", JSON.dump({ "username" => "jhawthorn", "id" => 123, "event" => "wrote json serializer" })
-
 benchmark_parsing "test from oj", <<JSON
-{"a":"Alpha","b":true,"c":12345,"d":[true,[false,[-123456789,null],3.9676,["Something else.",false],null]],"e":{"zero":null,"one":1,"two":2,"three":[3],"four":[0,1,2,3,4]},"f":null,"h":{"a":{"b":{"c":{"d":{"e":{"f":{"g":null}}}}}}},"i":[[[[[[[null]]]]]]]}
+{"a":"Alpha","b":true,"c":12345,"d":[true,[false,[-123456789,null],3.9676,["Something else.",false],null]],
+"e":{"zero":null,"one":1,"two":2,"three":[3],"four":[0,1,2,3,4]},"f":null,
+"h":{"a":{"b":{"c":{"d":{"e":{"f":{"g":null}}}}}}},"i":[[[[[[[null]]]]]]]}
 JSON
 
-# On these macro-benchmarks, we're on par with `Oj::Parser` and significantly
-# faster than `Oj.load`.
+# On these macro-benchmarks, we're on par with `Oj::Parser`, except `twitter.json` where we're `1.14x` faster,
+# And between 1.3x and 1.5x faster than `Oj.load`.
 benchmark_parsing "activitypub.json", File.read("#{__dir__}/data/activitypub.json")
 benchmark_parsing "twitter.json", File.read("#{__dir__}/data/twitter.json")
 benchmark_parsing "citm_catalog.json", File.read("#{__dir__}/data/citm_catalog.json")
 
-# rapidjson is 8x faster thanks to it's much more performant float parser.
+# rapidjson is 8x faster thanks to its much more performant float parser.
 # Unfortunately, there isn't a lot of existing fast float parsers in pure C,
 # and including C++ is problematic.
-# Aside from that, we're much faster than other alternatives here.
+# Aside from that, we're close to the alternatives here.
 benchmark_parsing "float parsing", File.read("#{__dir__}/data/canada.json")
