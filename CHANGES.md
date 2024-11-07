@@ -1,5 +1,7 @@
 # Changes
 
+* `JSON.load_file` explictly read the file as UTF-8.
+
 ### 2024-11-06 (2.8.1)
 
 * Fix the java packages to include the extension.
