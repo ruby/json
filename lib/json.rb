@@ -584,4 +584,12 @@ require 'json/common'
 module JSON
   require 'json/version'
   require 'json/ext'
+
+  class Parser
+    def self.convert_hash(from, to) # :nodoc:
+      from.each_pair { |k,v| to[k] = v }
+      to
+    end
+    private_class_method :convert_hash
+  end
 end

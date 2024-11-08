@@ -480,10 +480,12 @@ static void raise_parse_error(const char *format, const char *start)
     write data;
 
     action parse_value {
-        char *np = JSON_parse_value(json, fpc, pe, result, current_nesting, true);
+        VALUE val;
+        char *np = JSON_parse_value(json, fpc, pe, &val, current_nesting, true);
         if (np == NULL) {
             fhold; fbreak;
         } else {
+            rb_hash_aset(hash, key, val);
             fexec np;
         }
     }
@@ -493,10 +495,9 @@ static void raise_parse_error(const char *format, const char *start)
     action parse_name {
         char *np;
         json->parsing_name = true;
-        np = JSON_parse_string(json, fpc, pe, result);
+        np = JSON_parse_string(json, fpc, pe, &key);
         json->parsing_name = false;
         if (np == NULL) { fhold; fbreak; } else {
-            PUSH(*result);
             fexec np;
          }
     }
@@ -525,6 +526,10 @@ static char *JSON_parse_object(JSON_Parser *json, char *p, char *pe, VALUE *resu
         rb_raise(eNestingError, "nesting of %d is too deep", current_nesting);
     }
 
+    // speculate we are parsing a hash
+    VALUE hash = rb_hash_new();
+    VALUE key = Qnil;
+
     long stack_head = json->stack->head;
 
     %% write init;
@@ -535,25 +540,11 @@ static char *JSON_parse_object(JSON_Parser *json, char *p, char *pe, VALUE *resu
 
         if (RB_UNLIKELY(json->object_class)) {
             VALUE object = rb_class_new_instance(0, 0, json->object_class);
-            long index = 0;
-            VALUE *items = PEEK(count);
-            while (index < count) {
-                VALUE name = items[index++];
-                VALUE value = items[index++];
-                rb_funcall(object, i_aset, 2, name, value);
-            }
+            rb_funcall(cParser, rb_intern("convert_hash"), 2, hash, object);
             *result = object;
         } else {
-            VALUE hash;
-#ifdef HAVE_RB_HASH_NEW_CAPA
-            hash = rb_hash_new_capa(count >> 1);
-#else
-            hash = rb_hash_new();
-#endif
-            rb_hash_bulk_insert(count, PEEK(count), hash);
             *result = hash;
         }
-        POP(count);
 
         if (RB_UNLIKELY(json->create_additions)) {
             VALUE klassname;
