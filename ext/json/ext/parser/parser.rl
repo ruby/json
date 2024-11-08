@@ -419,7 +419,7 @@ typedef struct JSON_ParserStruct {
 static const rb_data_type_t JSON_Parser_type;
 static char *JSON_parse_string(JSON_Parser *json, char *p, char *pe, VALUE *result);
 static char *JSON_parse_object(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting);
-static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting);
+static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting, bool push);
 static char *JSON_parse_number(JSON_Parser *json, char *p, char *pe, VALUE *result);
 static char *JSON_parse_array(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting);
 
@@ -480,7 +480,7 @@ static void raise_parse_error(const char *format, const char *start)
     write data;
 
     action parse_value {
-        char *np = JSON_parse_value(json, fpc, pe, result, current_nesting);
+        char *np = JSON_parse_value(json, fpc, pe, result, current_nesting, true);
         if (np == NULL) {
             fhold; fbreak;
         } else {
@@ -662,7 +662,7 @@ main := ignore* (
         ) ignore* %*exit;
 }%%
 
-static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting)
+static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting, bool push)
 {
     int cs = EVIL;
 
@@ -674,7 +674,9 @@ static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *resul
     }
 
     if (cs >= JSON_value_first_final) {
-        PUSH(*result);
+        if (push) {
+            PUSH(*result);
+        }
         return p;
     } else {
         return NULL;
@@ -813,10 +815,11 @@ static char *JSON_parse_number(JSON_Parser *json, char *p, char *pe, VALUE *resu
 
     action parse_value {
         VALUE v = Qnil;
-        char *np = JSON_parse_value(json, fpc, pe, &v, current_nesting);
+        char *np = JSON_parse_value(json, fpc, pe, &v, current_nesting, false);
         if (np == NULL) {
             fhold; fbreak;
         } else {
+            rb_ary_push(ary, v);
             fexec np;
         }
     }
@@ -840,27 +843,24 @@ static char *JSON_parse_array(JSON_Parser *json, char *p, char *pe, VALUE *resul
     if (json->max_nesting && current_nesting > json->max_nesting) {
         rb_raise(eNestingError, "nesting of %d is too deep", current_nesting);
     }
-    long stack_head = json->stack->head;
+
+    // speculate that it's a regular array
+    VALUE ary = rb_ary_new();
 
     %% write init;
     %% write exec;
 
     if(cs >= JSON_array_first_final) {
-        long count = json->stack->head - stack_head;
-
         if (RB_UNLIKELY(json->array_class)) {
             VALUE array = rb_class_new_instance(0, 0, json->array_class);
-            VALUE *items = PEEK(count);
             long index;
-            for (index = 0; index < count; index++) {
-                rb_funcall(array, i_leftshift, 1, items[index]);
+            for (index = 0; index < RARRAY_LEN(ary); index++) {
+                rb_funcall(array, i_leftshift, 1, rb_ary_entry(ary, index));
             }
             *result = array;
         } else {
-            VALUE array = rb_ary_new_from_values(count, PEEK(count));
-            *result = array;
+            *result = ary;
         }
-        POP(count);
 
         return p + 1;
     } else {
@@ -1248,7 +1248,7 @@ static VALUE cParser_initialize(int argc, VALUE *argv, VALUE self)
     include JSON_common;
 
     action parse_value {
-        char *np = JSON_parse_value(json, fpc, pe, &result, 0);
+        char *np = JSON_parse_value(json, fpc, pe, &result, 0, false);
         if (np == NULL) { fhold; fbreak; } else fexec np;
     }
 
