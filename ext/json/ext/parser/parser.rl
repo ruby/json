@@ -514,6 +514,8 @@ static void raise_parse_error(const char *format, const char *start)
 }%%
 
 #define PUSH(result) rvalue_stack_push(json->stack, result, &json->stack_handle, &json->stack)
+#define PEEK(count) rvalue_stack_peek(json->stack, count)
+#define POP(count) rvalue_stack_pop(json->stack, count)
 
 static char *JSON_parse_object(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting)
 {
@@ -534,7 +536,7 @@ static char *JSON_parse_object(JSON_Parser *json, char *p, char *pe, VALUE *resu
         if (RB_UNLIKELY(json->object_class)) {
             VALUE object = rb_class_new_instance(0, 0, json->object_class);
             long index = 0;
-            VALUE *items = rvalue_stack_peek(json->stack, count);
+            VALUE *items = PEEK(count);
             while (index < count) {
                 VALUE name = items[index++];
                 VALUE value = items[index++];
@@ -548,10 +550,10 @@ static char *JSON_parse_object(JSON_Parser *json, char *p, char *pe, VALUE *resu
 #else
             hash = rb_hash_new();
 #endif
-            rb_hash_bulk_insert(count, rvalue_stack_peek(json->stack, count), hash);
+            rb_hash_bulk_insert(count, PEEK(count), hash);
             *result = hash;
         }
-        rvalue_stack_pop(json->stack, count);
+        POP(count);
 
         if (RB_UNLIKELY(json->create_additions)) {
             VALUE klassname;
@@ -848,17 +850,17 @@ static char *JSON_parse_array(JSON_Parser *json, char *p, char *pe, VALUE *resul
 
         if (RB_UNLIKELY(json->array_class)) {
             VALUE array = rb_class_new_instance(0, 0, json->array_class);
-            VALUE *items = rvalue_stack_peek(json->stack, count);
+            VALUE *items = PEEK(count);
             long index;
             for (index = 0; index < count; index++) {
                 rb_funcall(array, i_leftshift, 1, items[index]);
             }
             *result = array;
         } else {
-            VALUE array = rb_ary_new_from_values(count, rvalue_stack_peek(json->stack, count));
+            VALUE array = rb_ary_new_from_values(count, PEEK(count));
             *result = array;
         }
-        rvalue_stack_pop(json->stack, count);
+        POP(count);
 
         return p + 1;
     } else {
