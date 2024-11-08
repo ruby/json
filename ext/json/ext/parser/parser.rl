@@ -419,7 +419,7 @@ typedef struct JSON_ParserStruct {
 static const rb_data_type_t JSON_Parser_type;
 static char *JSON_parse_string(JSON_Parser *json, char *p, char *pe, VALUE *result);
 static char *JSON_parse_object(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting);
-static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting, bool push);
+static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting);
 static char *JSON_parse_number(JSON_Parser *json, char *p, char *pe, VALUE *result);
 static char *JSON_parse_array(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting);
 
@@ -481,11 +481,22 @@ static void raise_parse_error(const char *format, const char *start)
 
     action parse_value {
         VALUE val;
-        char *np = JSON_parse_value(json, fpc, pe, &val, current_nesting, true);
+        char *np = JSON_parse_value(json, fpc, pe, &cache[cache_count], current_nesting);
         if (np == NULL) {
             fhold; fbreak;
         } else {
-            rb_hash_aset(hash, key, val);
+            cache_count++;
+            if (cache_count == 20) {
+                if (!hash) {
+#ifdef HAVE_RB_HASH_NEW_CAPA
+                    hash = rb_hash_new_capa(20);
+#else
+                    hash = rb_hash_new();
+#endif
+                }
+                rb_hash_bulk_insert(20, cache, hash);
+                cache_count = 0;
+            }
             fexec np;
         }
     }
@@ -495,7 +506,8 @@ static void raise_parse_error(const char *format, const char *start)
     action parse_name {
         char *np;
         json->parsing_name = true;
-        np = JSON_parse_string(json, fpc, pe, &key);
+        np = JSON_parse_string(json, fpc, pe, &cache[cache_count]);
+        cache_count++;
         json->parsing_name = false;
         if (np == NULL) { fhold; fbreak; } else {
             fexec np;
@@ -526,8 +538,10 @@ static char *JSON_parse_object(JSON_Parser *json, char *p, char *pe, VALUE *resu
         rb_raise(eNestingError, "nesting of %d is too deep", current_nesting);
     }
 
+    VALUE cache[20];
+    unsigned int cache_count = 0;
     // speculate we are parsing a hash
-    VALUE hash = rb_hash_new();
+    VALUE hash = 0;
     VALUE key = Qnil;
 
     long stack_head = json->stack->head;
@@ -537,6 +551,19 @@ static char *JSON_parse_object(JSON_Parser *json, char *p, char *pe, VALUE *resu
 
     if (cs >= JSON_object_first_final) {
         long count = json->stack->head - stack_head;
+
+        if (!hash) {
+#ifdef HAVE_RB_HASH_NEW_CAPA
+            hash = rb_hash_new_capa(cache_count);
+#else
+            hash = rb_hash_new();
+#endif
+        }
+
+        if (cache_count > 0) {
+            rb_hash_bulk_insert(cache_count, cache, hash);
+            cache_count = 0;
+        }
 
         if (RB_UNLIKELY(json->object_class)) {
             VALUE object = rb_class_new_instance(0, 0, json->object_class);
@@ -653,7 +680,7 @@ main := ignore* (
         ) ignore* %*exit;
 }%%
 
-static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting, bool push)
+static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *result, int current_nesting)
 {
     int cs = EVIL;
 
@@ -665,9 +692,6 @@ static char *JSON_parse_value(JSON_Parser *json, char *p, char *pe, VALUE *resul
     }
 
     if (cs >= JSON_value_first_final) {
-        if (push) {
-            PUSH(*result);
-        }
         return p;
     } else {
         return NULL;
@@ -805,12 +829,21 @@ static char *JSON_parse_number(JSON_Parser *json, char *p, char *pe, VALUE *resu
     write data;
 
     action parse_value {
-        VALUE v = Qnil;
-        char *np = JSON_parse_value(json, fpc, pe, &v, current_nesting, false);
+        char *np = JSON_parse_value(json, fpc, pe, &cache[cache_count], current_nesting);
         if (np == NULL) {
             fhold; fbreak;
         } else {
-            rb_ary_push(ary, v);
+            cache_count++;
+            if (cache_count == 20) {
+                if (!ary) {
+                    ary = rb_ary_new_from_values(cache_count, cache);
+                    cache_count = 0;
+                }
+                else {
+                    rb_ary_concat(ary, rb_ary_new_from_values(cache_count, cache));
+                    cache_count = 0;
+                }
+            }
             fexec np;
         }
     }
@@ -836,12 +869,25 @@ static char *JSON_parse_array(JSON_Parser *json, char *p, char *pe, VALUE *resul
     }
 
     // speculate that it's a regular array
-    VALUE ary = rb_ary_new();
+    VALUE cache[20];
+    unsigned int cache_count = 0;
+    VALUE ary = 0;
 
     %% write init;
     %% write exec;
 
     if(cs >= JSON_array_first_final) {
+        if (!ary) {
+            ary = rb_ary_new_from_values(cache_count, cache);
+            cache_count = 0;
+        }
+        else {
+            if (cache_count > 0) {
+                rb_ary_concat(ary, rb_ary_new_from_values(cache_count, cache));
+                cache_count = 0;
+            }
+        }
+
         if (RB_UNLIKELY(json->array_class)) {
             VALUE array = rb_class_new_instance(0, 0, json->array_class);
             long index;
@@ -1239,7 +1285,7 @@ static VALUE cParser_initialize(int argc, VALUE *argv, VALUE self)
     include JSON_common;
 
     action parse_value {
-        char *np = JSON_parse_value(json, fpc, pe, &result, 0, false);
+        char *np = JSON_parse_value(json, fpc, pe, &result, 0);
         if (np == NULL) { fhold; fbreak; } else fexec np;
     }
 
@@ -1261,17 +1307,6 @@ static VALUE cParser_parse(VALUE self)
     int cs = EVIL;
     VALUE result = Qnil;
     GET_PARSER;
-
-    char stack_buffer[FBUFFER_STACK_SIZE];
-    fbuffer_stack_init(&json->fbuffer, FBUFFER_INITIAL_LENGTH_DEFAULT, stack_buffer, FBUFFER_STACK_SIZE);
-
-    VALUE rvalue_stack_buffer[RVALUE_STACK_INITIAL_CAPA];
-    rvalue_stack stack = {
-        .type = RVALUE_STACK_STACK_ALLOCATED,
-        .ptr = rvalue_stack_buffer,
-        .capa = RVALUE_STACK_INITIAL_CAPA,
-    };
-    json->stack = &stack;
 
     %% write init;
     p = json->source;
@@ -1302,14 +1337,6 @@ static VALUE cParser_m_parse(VALUE klass, VALUE source, VALUE opts)
 
     char stack_buffer[FBUFFER_STACK_SIZE];
     fbuffer_stack_init(&json->fbuffer, FBUFFER_INITIAL_LENGTH_DEFAULT, stack_buffer, FBUFFER_STACK_SIZE);
-
-    VALUE rvalue_stack_buffer[RVALUE_STACK_INITIAL_CAPA];
-    rvalue_stack stack = {
-        .type = RVALUE_STACK_STACK_ALLOCATED,
-        .ptr = rvalue_stack_buffer,
-        .capa = RVALUE_STACK_INITIAL_CAPA,
-    };
-    json->stack = &stack;
 
     %% write init;
     p = json->source;
