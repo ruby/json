@@ -19,7 +19,7 @@ def benchmark_parsing(name, json_output)
   Benchmark.ips do |x|
     x.report("json")      { JSON.parse(json_output) } if RUN[:json]
     x.report("oj")        { Oj.load(json_output) } if RUN[:oj]
-    x.report("Oj::Parser") { Oj::Parser.usual.parse(json_output) } if RUN[:oj]
+    x.report("Oj::Parser") { Oj::Parser.new(:usual).parse(json_output) } if RUN[:oj]
     x.report("rapidjson") { RapidJSON.parse(json_output) } if RUN[:rapidjson]
     x.compare!(order: :baseline)
   end
@@ -28,10 +28,6 @@ end
 
 # NB: Notes are based on ruby 3.3.4 (2024-07-09 revision be1089c8ec) +YJIT [arm64-darwin23]
 
-# Oj::Parser is significanly faster (~1.3x) on the next 3 micro-benchmarks in large part because its
-# cache is persisted across calls. That's not something we can do with the current API, we'd
-# need to expose a stateful API as well, but that's no really desirable.
-# Other than that we're faster than regular `Oj.load` by a good margin (between 1.3x and 2.4x).
 benchmark_parsing "small nested array", JSON.dump([[1,2,3,4,5]]*10)
 benchmark_parsing "small hash", JSON.dump({ "username" => "jhawthorn", "id" => 123, "event" => "wrote json serializer" })
 benchmark_parsing "test from oj", <<JSON
