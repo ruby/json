@@ -1,5 +1,7 @@
 # Changes
 
+### 2024-11-14 (2.8.2)
+
 * `JSON.load_file` explictly read the file as UTF-8.
 
 ### 2024-11-06 (2.8.1)
