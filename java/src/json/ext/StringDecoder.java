@@ -9,6 +9,8 @@ import org.jruby.exceptions.RaiseException;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.util.ByteList;
 
+import java.io.IOException;
+
 /**
  * A decoder that reads a JSON-encoded string from the given sources and
  * returns its decoded form on a new ByteList. Escaped Unicode characters
@@ -29,17 +31,20 @@ final class StringDecoder extends ByteListTranscoder {
     }
 
     ByteList decode(ByteList src, int start, int end) {
-        ByteList out = new ByteList(end - start);
-        out.setEncoding(src.getEncoding());
-        init(src, start, end, out);
-        while (hasNext()) {
-            handleChar(readUtf8Char());
+        try {
+            ByteListDirectOutputStream out = new ByteListDirectOutputStream(end - start);
+            init(src, start, end, out);
+            while (hasNext()) {
+                handleChar(readUtf8Char());
+            }
+            quoteStop(pos);
+            return out.toByteListDirect(src.getEncoding());
+        } catch (IOException e) {
+            throw context.runtime.newIOErrorFromException(e);
         }
-        quoteStop(pos);
-        return out;
     }
 
-    private void handleChar(int c) {
+    private void handleChar(int c) throws IOException {
         if (c == '\\') {
             quoteStop(charStart);
             handleEscapeSequence();
@@ -48,7 +53,7 @@ final class StringDecoder extends ByteListTranscoder {
         }
     }
 
-    private void handleEscapeSequence() {
+    private void handleEscapeSequence() throws IOException {
         ensureMin(1);
         switch (readUtf8Char()) {
         case 'b':
@@ -83,7 +88,7 @@ final class StringDecoder extends ByteListTranscoder {
         }
     }
 
-    private void handleLowSurrogate(char highSurrogate) {
+    private void handleLowSurrogate(char highSurrogate) throws IOException {
         surrogatePairStart = charStart;
         ensureMin(1);
         int lowSurrogate = readUtf8Char();
@@ -103,7 +108,7 @@ final class StringDecoder extends ByteListTranscoder {
         }
     }
 
-    private void writeUtf8Char(int codePoint) {
+    private void writeUtf8Char(int codePoint) throws IOException {
         if (codePoint < 0x80) {
             append(codePoint);
         } else if (codePoint < 0x800) {

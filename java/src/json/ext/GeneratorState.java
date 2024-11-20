@@ -230,15 +230,21 @@ public class GeneratorState extends RubyObject {
      */
     @JRubyMethod
     public IRubyObject generate(ThreadContext context, IRubyObject obj) {
-        RubyString result = Generator.generateJson(context, obj, this);
+        IRubyObject result = Generator.generateJson(context, obj, this);
         RuntimeInfo info = RuntimeInfo.forRuntime(context.getRuntime());
-        if (result.getEncoding() != UTF8Encoding.INSTANCE) {
-            if (result.isFrozen()) {
-                result = result.strDup(context.getRuntime());
-            }
-            result.force_encoding(context, info.utf8.get());
+        if (!(result instanceof RubyString)) {
+            return result;
         }
-        return result;
+
+        RubyString resultString = result.convertToString();
+        if (resultString.getEncoding() != UTF8Encoding.INSTANCE) {
+            if (resultString.isFrozen()) {
+                resultString = resultString.strDup(context.getRuntime());
+            }
+            resultString.force_encoding(context, info.utf8.get());
+        }
+
+        return resultString;
     }
 
     private static boolean matchClosingBrace(ByteList bl, int pos, int len,

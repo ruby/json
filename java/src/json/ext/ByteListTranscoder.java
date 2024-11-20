@@ -9,6 +9,9 @@ import org.jruby.exceptions.RaiseException;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.util.ByteList;
 
+import java.io.IOException;
+import java.io.OutputStream;
+
 /**
  * A class specialized in transcoding a certain String format into another,
  * using UTF-8 ByteLists as both input and output.
@@ -23,7 +26,7 @@ abstract class ByteListTranscoder {
     /** Position of the next character to read */
     protected int pos;
 
-    private ByteList out;
+    private OutputStream out;
     /**
      * When a character that can be copied straight into the output is found,
      * its index is stored on this variable, and copying is delayed until
@@ -37,11 +40,11 @@ abstract class ByteListTranscoder {
         this.context = context;
     }
 
-    protected void init(ByteList src, ByteList out) {
+    protected void init(ByteList src, OutputStream out) {
         this.init(src, 0, src.length(), out);
     }
 
-    protected void init(ByteList src, int start, int end, ByteList out) {
+    protected void init(ByteList src, int start, int end, OutputStream out) {
         this.src = src;
         this.pos = start;
         this.charStart = start;
@@ -142,19 +145,19 @@ abstract class ByteListTranscoder {
      *               recently read character, or {@link #charStart} to quote
      *               until the character before it.
      */
-    protected void quoteStop(int endPos) {
+    protected void quoteStop(int endPos) throws IOException {
         if (quoteStart != -1) {
-            out.append(src, quoteStart, endPos - quoteStart);
+            out.write(src.bytes(), quoteStart, endPos - quoteStart);
             quoteStart = -1;
         }
     }
 
-    protected void append(int b) {
-        out.append(b);
+    protected void append(int b) throws IOException {
+        out.write(b);
     }
 
-    protected void append(byte[] origin, int start, int length) {
-        out.append(origin, start, length);
+    protected void append(byte[] origin, int start, int length) throws IOException {
+        out.write(origin, start, length);
     }
 
 

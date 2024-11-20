@@ -9,6 +9,9 @@ import org.jruby.exceptions.RaiseException;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.util.ByteList;
 
+import java.io.IOException;
+import java.io.OutputStream;
+
 /**
  * An encoder that reads from the given source and outputs its representation
  * to another ByteList. The source string is fully checked for UTF-8 validity,
@@ -43,7 +46,7 @@ final class StringEncoder extends ByteListTranscoder {
         this.scriptSafe = scriptSafe;
     }
 
-    void encode(ByteList src, ByteList out) {
+    void encode(ByteList src, OutputStream out) throws IOException {
         init(src, out);
         append('"');
         while (hasNext()) {
@@ -53,7 +56,7 @@ final class StringEncoder extends ByteListTranscoder {
         append('"');
     }
 
-    private void handleChar(int c) {
+    private void handleChar(int c) throws IOException {
         switch (c) {
         case '"':
         case '\\':
@@ -97,13 +100,13 @@ final class StringEncoder extends ByteListTranscoder {
         }
     }
 
-    private void escapeChar(char c) {
+    private void escapeChar(char c) throws IOException {
         quoteStop(charStart);
         aux[ESCAPE_CHAR_OFFSET + 1] = (byte)c;
         append(aux, ESCAPE_CHAR_OFFSET, 2);
     }
 
-    private void escapeUtf8Char(int codePoint) {
+    private void escapeUtf8Char(int codePoint) throws IOException {
         int numChars = Character.toChars(codePoint, utf16, 0);
         escapeCodeUnit(utf16[0], ESCAPE_UNI1_OFFSET + 2);
         if (numChars > 1) escapeCodeUnit(utf16[1], ESCAPE_UNI2_OFFSET + 2);

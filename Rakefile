@@ -161,7 +161,7 @@ if defined?(RUBY_ENGINE) and RUBY_ENGINE == 'jruby'
   file JRUBY_PARSER_JAR => :compile do
     cd 'java/src' do
       parser_classes = FileList[
-        "json/ext/ByteListTranscoder*.class",
+        "json/ext/ByteList*.class",
         "json/ext/OptionsReader*.class",
         "json/ext/Parser*.class",
         "json/ext/RuntimeInfo*.class",
@@ -179,7 +179,7 @@ if defined?(RUBY_ENGINE) and RUBY_ENGINE == 'jruby'
   file JRUBY_GENERATOR_JAR => :compile do
     cd 'java/src' do
       generator_classes = FileList[
-        "json/ext/ByteListTranscoder*.class",
+        "json/ext/ByteList*.class",
         "json/ext/OptionsReader*.class",
         "json/ext/Generator*.class",
         "json/ext/RuntimeInfo*.class",
