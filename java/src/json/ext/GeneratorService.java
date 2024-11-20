@@ -37,6 +37,8 @@ public class GeneratorService implements BasicLibraryService {
             generatorModule.defineModuleUnder("GeneratorMethods");
         GeneratorMethods.populate(info, generatorMethods);
 
+        runtime.getLoadService().require("json/ext/generator/state");
+
         return true;
     }
 }

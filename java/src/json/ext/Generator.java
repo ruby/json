@@ -59,11 +59,16 @@ public final class Generator {
      */
     public static <T extends IRubyObject> IRubyObject
             generateJson(ThreadContext context, T object,
-                         GeneratorState config) {
+                         GeneratorState config, IRubyObject io) {
         Session session = new Session(context, config);
         Handler<? super T> handler = getHandlerFor(context.runtime, object);
 
-        return handler.generateNew(session, object);
+        if (io.isNil()) {
+            return handler.generateNew(session, object);
+        }
+
+        handler.generateToBuffer(session, object, new IOOutputStream(io));
+        return io;
     }
 
     /**

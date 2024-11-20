@@ -139,8 +139,8 @@ public class GeneratorState extends RubyObject {
     }
 
     @JRubyMethod(meta=true)
-    public static IRubyObject generate(ThreadContext context, IRubyObject klass, IRubyObject obj, IRubyObject opts) {
-        return fromState(context, opts).generate(context, obj);
+    public static IRubyObject generate(ThreadContext context, IRubyObject klass, IRubyObject obj, IRubyObject opts, IRubyObject io) {
+        return fromState(context, opts)._generate(context, obj, io);
     }
 
     static GeneratorState fromState(ThreadContext context, IRubyObject opts) {
@@ -196,7 +196,7 @@ public class GeneratorState extends RubyObject {
      */
     @JRubyMethod(optional=1, visibility=Visibility.PRIVATE)
     public IRubyObject initialize(ThreadContext context, IRubyObject[] args) {
-        configure(context, args.length > 0 ? args[0] : null);
+        _configure(context, args.length > 0 ? args[0] : null);
         return this;
     }
 
@@ -228,9 +228,9 @@ public class GeneratorState extends RubyObject {
      * the result. If no valid JSON document can be created this method raises
      * a GeneratorError exception.
      */
-    @JRubyMethod
-    public IRubyObject generate(ThreadContext context, IRubyObject obj) {
-        IRubyObject result = Generator.generateJson(context, obj, this);
+    @JRubyMethod(visibility = Visibility.PRIVATE)
+    public IRubyObject _generate(ThreadContext context, IRubyObject obj, IRubyObject io) {
+        IRubyObject result = Generator.generateJson(context, obj, this, io);
         RuntimeInfo info = RuntimeInfo.forRuntime(context.getRuntime());
         if (!(result instanceof RubyString)) {
             return result;
@@ -411,7 +411,7 @@ public class GeneratorState extends RubyObject {
         return strict;
     }
 
-    @JRubyMethod(name="strict")
+    @JRubyMethod(name={"strict","strict?"})
     public RubyBoolean strict_get(ThreadContext context) {
         return context.getRuntime().newBoolean(strict);
     }
@@ -484,8 +484,8 @@ public class GeneratorState extends RubyObject {
      * @param vOpts The options hash
      * @return The receiver
      */
-  @JRubyMethod(alias = "merge")
-    public IRubyObject configure(ThreadContext context, IRubyObject vOpts) {
+  @JRubyMethod(visibility=Visibility.PRIVATE)
+    public IRubyObject _configure(ThreadContext context, IRubyObject vOpts) {
         OptionsReader opts = new OptionsReader(context, vOpts);
 
         ByteList indent = opts.getString("indent");
