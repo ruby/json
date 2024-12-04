@@ -1,5 +1,9 @@
 # Changes
 
+### 2024-12-03 (2.9.0)
+
+* Fix `generate(script_safe: true)` to not confuse unrelated characters
+
 ### 2024-11-14 (2.8.2)
 
 * `JSON.load_file` explictly read the file as UTF-8.
