@@ -661,4 +661,31 @@ class JSONGeneratorTest < Test::Unit::TestCase
   def test_nonutf8_encoding
     assert_equal("\"5\u{b0}\"", "5\xb0".dup.force_encoding(Encoding::ISO_8859_1).to_json)
   end
+
+  def test_json_coder_with_proc
+    coder = JSON::Coder.new do |object|
+      "[Object object]"
+    end
+    assert_equal %(["[Object object]"]), coder.dump([Object.new])
+  end
+
+  def test_json_coder_with_proc_with_unsupported_value
+    coder = JSON::Coder.new do |object|
+      Object.new
+    end
+    assert_raise(JSON::GeneratorError) { coder.dump([Object.new]) }
+  end
+
+  def test_json_coder_options
+    coder = JSON::Coder.new(array_nl: "\n") do |object|
+      42
+    end
+
+    assert_equal "[\n42\n]", coder.dump([Object.new])
+  end
+
+  def test_json_generate_as_json_convert_to_proc
+    object = Object.new
+    assert_equal object.object_id.to_json, JSON.generate(object, strict: true, as_json: :object_id)
+  end
 end

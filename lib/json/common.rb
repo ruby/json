@@ -841,6 +841,18 @@ module JSON
   class << self
     private :merge_dump_options
   end
+
+  class Coder
+    def initialize(options = nil, &as_json)
+      default_options = { strict: true, as_json: as_json }
+
+      @options = options ? options.merge(default_options) : default_options
+    end
+
+    def dump(object)
+      State.generate(object, @options, nil)
+    end
+  end
 end
 
 module ::Kernel
