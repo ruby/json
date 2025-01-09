@@ -18,9 +18,82 @@ import java.io.OutputStream;
  * and throws a GeneratorError if any problem is found.
  */
 final class StringEncoder extends ByteListTranscoder {
+    private static final int CHAR_LENGTH_MASK = 7;
+    private static final byte[] BACKSLASH_DOUBLEQUOTE = {'\\', '"'};
+    private static final byte[] BACKSLASH_BACKSLASH = {'\\', '\\'};
+    private static final byte[] BACKSLASH_FORWARDSLASH = {'\\', '/'};
+    private static final byte[] BACKSLASH_B = {'\\', 'b'};
+    private static final byte[] BACKSLASH_F = {'\\', 'f'};
+    private static final byte[] BACKSLASH_N = {'\\', 'n'};
+    private static final byte[] BACKSLASH_R = {'\\', 'r'};
+    private static final byte[] BACKSLASH_T = {'\\', 't'};
+    
+    static final byte[] ESCAPE_TABLE = {
+            // ASCII Control Characters
+            9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+            9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+            // ASCII Characters
+            0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // '"'
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, // '\\'
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    };
+
+    static final byte[] ASCII_ONLY_ESCAPE_TABLE = {
+            // ASCII Control Characters
+            9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+            9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+            // ASCII Characters
+            0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // '"'
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, // '\\'
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            // Continuation byte
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            // First byte of a  2-byte code point
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+            // First byte of a 3-byte code point
+            3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+            //First byte of a 4+ byte code point
+            4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 9, 9,
+    };
+
+    static final byte[] SCRIPT_SAFE_ESCAPE_TABLE = {
+            // ASCII Control Characters
+            9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+            9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+            // ASCII Characters
+            0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, // '"' and '/'
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, // '\\'
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            // Continuation byte
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            // First byte of a 2-byte code point
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+            // First byte of a 3-byte code point
+            3, 3, 11, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // 0xE2 is the start of \u2028 and \u2029
+            //First byte of a 4+ byte code point
+            4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 9, 9,
+    };
+
     private final boolean asciiOnly, scriptSafe;
 
-    private OutputStream out;
+    OutputStream out;
 
     // Escaped characters will reuse this array, to avoid new allocations
     // or appending them byte-by-byte
@@ -48,25 +121,114 @@ final class StringEncoder extends ByteListTranscoder {
     }
 
     void encode(ThreadContext context, ByteList src, OutputStream out) throws IOException {
-        init(src);
-        this.out = out;
-        append('"');
         while (hasNext()) {
             handleChar(readUtf8Char(context));
         }
-        quoteStop(pos);
-        append('"');
     }
 
+    // C: convert_UTF8_to_ASCII_only_JSON
     void encodeASCII(ThreadContext context, ByteList src, OutputStream out) throws IOException {
-        init(src);
-        this.out = out;
-        append('"');
-        while (hasNext()) {
-            handleChar(readASCIIChar());
+        byte[] escape_table = scriptSafe ? SCRIPT_SAFE_ESCAPE_TABLE : ASCII_ONLY_ESCAPE_TABLE;
+        byte[] hexdig = HEX;
+        byte[] scratch = aux;
+
+        byte[] ptrBytes = src.unsafeBytes();
+        int ptr = src.begin();
+        int len = src.realSize();
+
+        int beg = 0;
+        int pos = 0;
+
+        while (pos < len) {
+            byte ch = ptrBytes[ptr + pos];
+            int ch_len = escape_table[ch];
+
+            if (ch_len != 0) {
+                switch (ch_len) {
+                    case 9: {
+                        if (pos > beg) { append(ptrBytes, ptr + beg, pos - beg); } pos += 1; beg = pos; // FLUSH_POS
+                        switch (ch) {
+                            case '"':  appendEscape(BACKSLASH_DOUBLEQUOTE); break;
+                            case '\\': appendEscape(BACKSLASH_BACKSLASH); break;
+                            case '/':  appendEscape(BACKSLASH_FORWARDSLASH); break;
+                            case '\b': appendEscape(BACKSLASH_B); break;
+                            case '\f': appendEscape(BACKSLASH_F); break;
+                            case '\n': appendEscape(BACKSLASH_N); break;
+                            case '\r': appendEscape(BACKSLASH_R); break;
+                            case '\t': appendEscape(BACKSLASH_T); break;
+                            default: {
+                                scratch[2] = '0';
+                                scratch[3] = '0';
+                                scratch[4] = hexdig[(ch >> 4) & 0xf];
+                                scratch[5] = hexdig[ch & 0xf];
+                                append(scratch, 0, 6);
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                    default: {
+                        int wchar = 0;
+                        ch_len = ch_len & CHAR_LENGTH_MASK;
+
+                        switch(ch_len) {
+                            case 2:
+                                wchar = ptrBytes[ptr + pos] & 0x1F;
+                                break;
+                            case 3:
+                                wchar = ptrBytes[ptr + pos] & 0x0F;
+                                break;
+                            case 4:
+                                wchar = ptrBytes[ptr + pos] & CHAR_LENGTH_MASK;
+                                break;
+                        }
+
+                        for (short i = 1; i < ch_len; i++) {
+                            wchar = (wchar << 6) | (ptrBytes[ptr + pos +i] & 0x3F);
+                        }
+
+                        if (pos > beg) { append(ptrBytes, ptr + beg, pos - beg); } pos += ch_len; beg = pos; // FLUSH_POS
+
+                        if (wchar <= 0xFFFF) {
+                            scratch[2] = hexdig[wchar >> 12];
+                            scratch[3] = hexdig[(wchar >> 8) & 0xf];
+                            scratch[4] = hexdig[(wchar >> 4) & 0xf];
+                            scratch[5] = hexdig[wchar & 0xf];
+                            append(scratch, 0, 6);
+                        } else {
+                            int hi, lo;
+                            wchar -= 0x10000;
+                            hi = 0xD800 + (wchar >> 10);
+                            lo = 0xDC00 + (wchar & 0x3FF);
+
+                            scratch[2] = hexdig[hi >> 12];
+                            scratch[3] = hexdig[(hi >> 8) & 0xf];
+                            scratch[4] = hexdig[(hi >> 4) & 0xf];
+                            scratch[5] = hexdig[hi & 0xf];
+
+                            scratch[8] = hexdig[lo >> 12];
+                            scratch[9] = hexdig[(lo >> 8) & 0xf];
+                            scratch[10] = hexdig[(lo >> 4) & 0xf];
+                            scratch[11] = hexdig[lo & 0xf];
+
+                            append(scratch, 0, 12);
+                        }
+
+                        break;
+                    }
+                }
+            } else {
+                pos++;
+            }
         }
-        quoteStop(pos);
-        append('"');
+
+        if (beg < len) {
+            append(ptrBytes, ptr + beg, len - beg);
+        }
+    }
+
+    private void appendEscape(byte[] escape) throws IOException {
+        append(escape, 0, 2);
     }
 
     protected void append(int b) throws IOException {

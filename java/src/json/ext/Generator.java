@@ -438,6 +438,9 @@ public final class Generator {
 
                 StringEncoder stringEncoder = session.getStringEncoder(context);
                 ByteList byteList = object.getByteList();
+                stringEncoder.init(byteList);
+                stringEncoder.out = buffer;
+                stringEncoder.append('"');
                 switch (object.scanForCodeRange()) {
                     case StringSupport.CR_7BIT:
                         stringEncoder.encodeASCII(context, byteList, buffer);
@@ -448,6 +451,8 @@ public final class Generator {
                     default:
                         throw Utils.buildGeneratorError(context, object, "source sequence is illegal/malformed utf-8").toThrowable();
                 }
+                stringEncoder.quoteStop(stringEncoder.pos);
+                stringEncoder.append('"');
             }
         };
 
