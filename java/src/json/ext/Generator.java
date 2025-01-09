@@ -35,6 +35,7 @@ import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigInteger;
+import java.util.Set;
 
 import static java.nio.charset.StandardCharsets.*;
 
@@ -359,62 +360,65 @@ public final class Generator {
                 buffer.write((byte)'{');
                 buffer.write(objectNLBytes);
 
-                final boolean[] firstPair = new boolean[]{true};
-                object.visitAll(context, new RubyHash.VisitorWithState<boolean[]>() {
-                    @Override
-                    public void visit(ThreadContext context, RubyHash self, IRubyObject key, IRubyObject value, int index, boolean[] firstPair) {
-                        try {
-                            if (firstPair[0]) {
-                                firstPair[0] = false;
-                            } else {
-                                buffer.write((byte) ',');
-                                buffer.write(objectNLBytes);
-                            }
-                            if (!objectNl.isEmpty()) buffer.write(indent);
-
-                            Ruby runtime = context.runtime;
-
-                            IRubyObject keyStr;
-                            RubyClass keyClass = key.getType();
-                            if (key instanceof RubyString) {
-                                if (keyClass == runtime.getString()) {
-                                    keyStr = key;
-                                } else {
-                                    keyStr = key.callMethod(context, "to_s");
-                                }
-                            } else if (keyClass == runtime.getSymbol()) {
-                                keyStr = key.asString();
-                            } else {
-                                keyStr = TypeConverter.convertToType(key, runtime.getString(), "to_s");
-                            }
-
-                            if (keyStr.getMetaClass() == runtime.getString()) {
-                                STRING_HANDLER.generate(context, session, (RubyString) keyStr, buffer);
-                            } else {
-                                Utils.ensureString(keyStr);
-                                Handler<? super IRubyObject> keyHandler = getHandlerFor(runtime, keyStr);
-                                keyHandler.generate(context, session, keyStr, buffer);
-                            }
-
-                            buffer.write(spaceBefore.unsafeBytes());
-                            buffer.write((byte) ':');
-                            buffer.write(space.unsafeBytes());
-
-                            Handler<? super IRubyObject> valueHandler = getHandlerFor(runtime, value);
-                            valueHandler.generate(context, session, value, buffer);
-                        } catch (Throwable t) {
-                            Helpers.throwException(t);
-                        }
-                    }
-                }, firstPair);
+                boolean firstPair = true;
+                for (RubyHash.RubyHashEntry entry : (Set<RubyHash.RubyHashEntry>) object.directEntrySet()) {
+                    processEntry(context, session, buffer, entry, firstPair, objectNl, indent, spaceBefore, space);
+                    firstPair = false;
+                }
                 state.decreaseDepth();
-                if (!firstPair[0] && !objectNl.isEmpty()) {
+                if (!firstPair && !objectNl.isEmpty()) {
                     buffer.write(objectNLBytes);
                 }
                 buffer.write(Utils.repeat(state.getIndent(), state.getDepth()));
                 buffer.write((byte)'}');
             }
         };
+
+    private static void processEntry(ThreadContext context, Session session, OutputStream buffer, RubyHash.RubyHashEntry entry, boolean firstPair, ByteList objectNl, byte[] indent, ByteList spaceBefore, ByteList space) {
+        IRubyObject key = (IRubyObject) entry.getKey();
+        IRubyObject value = (IRubyObject) entry.getValue();
+
+        try {
+            if (!firstPair) {
+                buffer.write((byte) ',');
+                buffer.write(objectNl.unsafeBytes());
+            }
+            if (!objectNl.isEmpty()) buffer.write(indent);
+
+            Ruby runtime = context.runtime;
+
+            IRubyObject keyStr;
+            RubyClass keyClass = key.getType();
+            if (key instanceof RubyString) {
+                if (keyClass == runtime.getString()) {
+                    keyStr = key;
+                } else {
+                    keyStr = key.callMethod(context, "to_s");
+                }
+            } else if (keyClass == runtime.getSymbol()) {
+                keyStr = key.asString();
+            } else {
+                keyStr = TypeConverter.convertToType(key, runtime.getString(), "to_s");
+            }
+
+            if (keyStr.getMetaClass() == runtime.getString()) {
+                STRING_HANDLER.generate(context, session, (RubyString) keyStr, buffer);
+            } else {
+                Utils.ensureString(keyStr);
+                Handler<? super IRubyObject> keyHandler = getHandlerFor(runtime, keyStr);
+                keyHandler.generate(context, session, keyStr, buffer);
+            }
+
+            buffer.write(spaceBefore.unsafeBytes());
+            buffer.write((byte) ':');
+            buffer.write(space.unsafeBytes());
+
+            Handler<? super IRubyObject> valueHandler = getHandlerFor(runtime, value);
+            valueHandler.generate(context, session, value, buffer);
+        } catch (Throwable t) {
+            Helpers.throwException(t);
+        }
+    }
 
     static final Handler<RubyString> STRING_HANDLER =
         new Handler<RubyString>() {
