@@ -428,56 +428,9 @@ public final class Generator {
 
             @Override
             void generate(ThreadContext context, Session session, RubyString object, OutputStream buffer) throws IOException {
-                try {
-                    object = ensureValidEncoding(context, object);
-                } catch (RaiseException re) {
-                    RubyException exc = Utils.buildGeneratorError(context, object, re.getMessage());
-                    exc.setCause(re.getException());
-                    throw exc.toThrowable();
-                }
-
-                StringEncoder stringEncoder = session.getStringEncoder(context);
-                ByteList byteList = object.getByteList();
-                stringEncoder.init(byteList);
-                stringEncoder.out = buffer;
-                stringEncoder.append('"');
-                switch (object.scanForCodeRange()) {
-                    case StringSupport.CR_7BIT:
-                        stringEncoder.encodeASCII(context, byteList, buffer);
-                        break;
-                    case StringSupport.CR_VALID:
-                        stringEncoder.encode(context, byteList, buffer);
-                        break;
-                    default:
-                        throw Utils.buildGeneratorError(context, object, "source sequence is illegal/malformed utf-8").toThrowable();
-                }
-                stringEncoder.quoteStop(stringEncoder.pos);
-                stringEncoder.append('"');
+                session.getStringEncoder(context).generate(context, object, buffer);
             }
         };
-
-    static RubyString ensureValidEncoding(ThreadContext context, RubyString str) {
-        Encoding encoding = str.getEncoding();
-        RubyString utf8String;
-        if (!(encoding == USASCIIEncoding.INSTANCE || encoding == UTF8Encoding.INSTANCE)) {
-            if (encoding == ASCIIEncoding.INSTANCE) {
-                utf8String = str.strDup(context.runtime);
-                utf8String.setEncoding(UTF8Encoding.INSTANCE);
-                switch (utf8String.getCodeRange()) {
-                    case StringSupport.CR_7BIT:
-                        return utf8String;
-                    case StringSupport.CR_VALID:
-                        // For historical reason, we silently reinterpret binary strings as UTF-8 if it would work.
-                        // TODO: Raise in 3.0.0
-                        context.runtime.getWarnings().warn("JSON.generate: UTF-8 string passed as BINARY, this will raise an encoding error in json 3.0");
-                        return utf8String;
-                }
-            }
-
-            str = (RubyString) str.encode(context, context.runtime.getEncodingService().convertEncodingToRubyEncoding(UTF8Encoding.INSTANCE));
-        }
-        return str;
-    }
 
     static final Handler<RubyBoolean> TRUE_HANDLER =
             new KeywordHandler<>("true");
