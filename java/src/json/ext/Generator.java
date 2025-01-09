@@ -29,7 +29,7 @@ import java.io.OutputStream;
 import java.math.BigInteger;
 import java.util.Set;
 
-import static java.nio.charset.StandardCharsets.*;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 public final class Generator {
 
