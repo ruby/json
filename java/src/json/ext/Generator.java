@@ -5,9 +5,6 @@
  */
 package json.ext;
 
-import org.jcodings.Encoding;
-import org.jcodings.specific.ASCIIEncoding;
-import org.jcodings.specific.USASCIIEncoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
@@ -19,16 +16,12 @@ import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
 import org.jruby.RubyHash;
 import org.jruby.RubyString;
-import org.jruby.RubySymbol;
-import org.jruby.RubyException;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
-import org.jruby.exceptions.RaiseException;
 import org.jruby.util.ConvertBytes;
 import org.jruby.util.IOOutputStream;
-import org.jruby.util.StringSupport;
 import org.jruby.util.TypeConverter;
 
 import java.io.BufferedOutputStream;
