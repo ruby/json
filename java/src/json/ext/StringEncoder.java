@@ -18,6 +18,7 @@ import org.jruby.util.StringSupport;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 /**
  * An encoder that reads from the given source and outputs its representation
@@ -44,6 +45,15 @@ final class StringEncoder extends ByteListTranscoder {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, // '\\'
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     };
@@ -97,6 +107,8 @@ final class StringEncoder extends ByteListTranscoder {
             //First byte of a 4+ byte code point
             4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 9, 9,
     };
+    private static final byte[] BACKSLASH_U2028 = "\\u2028".getBytes(StandardCharsets.US_ASCII);
+    private static final byte[] BACKSLASH_U2029 = "\\u2029".getBytes(StandardCharsets.US_ASCII);
 
     private final boolean asciiOnly, scriptSafe;
 
@@ -143,10 +155,12 @@ final class StringEncoder extends ByteListTranscoder {
         append('"');
         switch (object.scanForCodeRange()) {
             case StringSupport.CR_7BIT:
-                encodeASCII(context, byteList, buffer);
-                break;
             case StringSupport.CR_VALID:
-                encode(context, byteList, buffer);
+                if (asciiOnly) {
+                    encodeASCII(byteList, scriptSafe ? SCRIPT_SAFE_ESCAPE_TABLE : ASCII_ONLY_ESCAPE_TABLE);
+                } else {
+                    encode(byteList, scriptSafe ? SCRIPT_SAFE_ESCAPE_TABLE : ESCAPE_TABLE);
+                }
                 break;
             default:
                 throw Utils.buildGeneratorError(context, object, "source sequence is illegal/malformed utf-8").toThrowable();
@@ -178,15 +192,85 @@ final class StringEncoder extends ByteListTranscoder {
         return str;
     }
 
-    void encode(ThreadContext context, ByteList src, OutputStream out) throws IOException {
-        while (hasNext()) {
-            handleChar(readUtf8Char(context));
+    // C: convert_UTF8_to_JSON
+    void encode(ByteList src, byte[] escape_table) throws IOException {
+        byte[] hexdig = HEX;
+        byte[] scratch = aux;
+
+        byte[] ptrBytes = src.unsafeBytes();
+        int ptr = src.begin();
+        int len = src.realSize();
+
+        int beg = 0;
+        int pos = 0;
+        
+        while (pos < len) {
+            int ch = Byte.toUnsignedInt(ptrBytes[ptr + pos]);
+            int ch_len = escape_table[ch];
+            /* JSON encoding */
+
+            if (ch_len > 0) {
+                switch (ch_len) {
+                    case 9: {
+                        beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                        switch (ch) {
+                            case '"':  appendEscape(BACKSLASH_DOUBLEQUOTE); break;
+                            case '\\': appendEscape(BACKSLASH_BACKSLASH); break;
+                            case '/':  appendEscape(BACKSLASH_FORWARDSLASH); break;
+                            case '\b': appendEscape(BACKSLASH_B); break;
+                            case '\f': appendEscape(BACKSLASH_F); break;
+                            case '\n': appendEscape(BACKSLASH_N); break;
+                            case '\r': appendEscape(BACKSLASH_R); break;
+                            case '\t': appendEscape(BACKSLASH_T); break;
+                            default: {
+                                scratch[2] = '0';
+                                scratch[3] = '0';
+                                scratch[4] = hexdig[(ch >> 4) & 0xf];
+                                scratch[5] = hexdig[ch & 0xf];
+                                append(scratch, 0, 6);
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                    case 11: {
+                        int b2 = Byte.toUnsignedInt(ptrBytes[ptr + pos + 1]);
+                        if (b2 == 0x80) {
+                            int b3 = Byte.toUnsignedInt(ptrBytes[ptr + pos + 2]);
+                            if (b3 == 0xA8) {
+                                beg = pos = flushPos(pos, beg, ptrBytes, ptr, 3);
+                                append(BACKSLASH_U2028, 0, 6);
+                                break;
+                            } else if (b3 == 0xA9) {
+                                beg = pos = flushPos(pos, beg, ptrBytes, ptr, 3);
+                                append(BACKSLASH_U2029, 0, 6);
+                                break;
+                            }
+                        }
+                        ch_len = 3;
+                        // fallthrough
+                    }
+                    default:
+                        pos += ch_len;
+                        break;
+                }
+            } else {
+                pos++;
+            }
+        }
+
+        if (beg < len) {
+            append(ptrBytes, ptr + beg, len - beg);
         }
     }
 
+    private int flushPos(int pos, int beg, byte[] ptrBytes, int ptr, int size) throws IOException {
+        if (pos > beg) { append(ptrBytes, ptr + beg, pos - beg); }
+        return pos + size;
+    }
+
     // C: convert_UTF8_to_ASCII_only_JSON
-    void encodeASCII(ThreadContext context, ByteList src, OutputStream out) throws IOException {
-        byte[] escape_table = scriptSafe ? SCRIPT_SAFE_ESCAPE_TABLE : ASCII_ONLY_ESCAPE_TABLE;
+    void encodeASCII(ByteList src, byte[] escape_table) throws IOException {
         byte[] hexdig = HEX;
         byte[] scratch = aux;
 
@@ -198,13 +282,13 @@ final class StringEncoder extends ByteListTranscoder {
         int pos = 0;
 
         while (pos < len) {
-            byte ch = ptrBytes[ptr + pos];
+            int ch = Byte.toUnsignedInt(ptrBytes[ptr + pos]);
             int ch_len = escape_table[ch];
 
             if (ch_len != 0) {
                 switch (ch_len) {
                     case 9: {
-                        if (pos > beg) { append(ptrBytes, ptr + beg, pos - beg); } pos += 1; beg = pos; // FLUSH_POS
+                        beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
                         switch (ch) {
                             case '"':  appendEscape(BACKSLASH_DOUBLEQUOTE); break;
                             case '\\': appendEscape(BACKSLASH_BACKSLASH); break;
@@ -245,7 +329,7 @@ final class StringEncoder extends ByteListTranscoder {
                             wchar = (wchar << 6) | (ptrBytes[ptr + pos +i] & 0x3F);
                         }
 
-                        if (pos > beg) { append(ptrBytes, ptr + beg, pos - beg); } pos += ch_len; beg = pos; // FLUSH_POS
+                        beg = pos = flushPos(pos, beg, ptrBytes, ptr, ch_len);
 
                         if (wchar <= 0xFFFF) {
                             scratch[2] = hexdig[wchar >> 12];
