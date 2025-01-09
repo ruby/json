@@ -20,7 +20,6 @@ import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
-import org.jruby.util.ConvertBytes;
 import org.jruby.util.IOOutputStream;
 import org.jruby.util.TypeConverter;
 
@@ -132,6 +131,7 @@ public final class Generator {
         private IRubyObject possibleState;
         private RuntimeInfo info;
         private StringEncoder stringEncoder;
+        private byte[] charBytes;
 
         Session(GeneratorState state) {
             this.state = state;
@@ -152,6 +152,11 @@ public final class Generator {
         public RuntimeInfo getInfo(ThreadContext context) {
             if (info == null) info = RuntimeInfo.forRuntime(context.runtime);
             return info;
+        }
+
+        public byte[] getCharBytes() {
+            if (charBytes == null) charBytes = new byte[Long.toString(Long.MIN_VALUE).length()];
+            return charBytes;
         }
 
         public StringEncoder getStringEncoder(ThreadContext context) {
@@ -237,9 +242,55 @@ public final class Generator {
         new Handler<RubyFixnum>() {
             @Override
             void generate(ThreadContext context, Session session, RubyFixnum object, OutputStream buffer) throws IOException {
-                buffer.write(ConvertBytes.longToCharBytes(object.getLongValue()));
+                long i = object.getLongValue();
+                if (i == 0) {
+                    buffer.write(ZERO_BYTES);
+                } else if (i == Long.MIN_VALUE) {
+                    buffer.write(MIN_VALUE_BYTES_RADIX_10);
+                } else {
+                    boolean neg = i < 0;
+                    if (neg) i = -i;
+                    int newSize = sizeWithDecimalString(i, neg, 0);
+                    byte[] charBytes = session.getCharBytes();
+                    writeDecimalDigitsToArray(charBytes, i, neg, 0, 0, newSize);
+                    buffer.write(charBytes, 0, newSize);
+                }
             }
         };
+
+    private static final byte[] ZERO_BYTES = new byte[] {(byte)'0'};
+    private static final byte[] MIN_VALUE_BYTES_RADIX_10;
+
+    static {
+        MIN_VALUE_BYTES_RADIX_10 = ByteList.plain(Long.toString(Long.MIN_VALUE, 10));
+    }
+
+    private static int sizeWithDecimalString(long i, boolean neg, int baseSize) {
+        int count = 0;
+        while (i > 9) {
+            i /= 10;
+            count++;
+        }
+        int newSize = baseSize + count + 1;
+
+        if (neg) newSize++;
+
+        return newSize;
+    }
+
+    private static void writeDecimalDigitsToArray(byte[] bytes, long i, boolean negative, int begin, int originalSize, int newSize) {
+        // write digits directly into the prepared byte array
+        for (int n = newSize - 1; i > 0; n--) {
+            bytes[begin + n] = decimalByteForDigit(i);
+            i /= 10;
+        }
+
+        if (negative) bytes[originalSize] = '-';
+    }
+
+    private static byte decimalByteForDigit(long i) {
+        return (byte) (i % 10 + '0');
+    }
 
     static final Handler<RubyFloat> FLOAT_HANDLER =
         new Handler<RubyFloat>() {
