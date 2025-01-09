@@ -16,6 +16,9 @@ import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
+import java.io.IOException;
+import java.io.OutputStream;
+
 /**
  * Library of miscellaneous utility functions
  */
@@ -87,5 +90,11 @@ final class Utils {
             System.arraycopy(a, begin, result, pos, length);
         }
         return result;
+    }
+
+    static void repeatWrite(OutputStream out, ByteList a, int n) throws IOException {
+        for (int i = 0; i < n; i++) {
+            out.write(a.unsafeBytes(), a.begin(), a.length());
+        }
     }
 }

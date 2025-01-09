@@ -354,16 +354,10 @@ public final class Generator {
             Ruby runtime = context.runtime;
 
             ByteList indentUnit = state.getIndent();
-            byte[] shift = Utils.repeat(indentUnit, depth);
-
             ByteList arrayNl = state.getArrayNl();
-            byte[] delim = new byte[1 + arrayNl.length()];
-            delim[0] = ',';
-            System.arraycopy(arrayNl.unsafeBytes(), arrayNl.begin(), delim, 1,
-                    arrayNl.length());
 
-            buffer.write((byte)'[');
-            buffer.write(arrayNl.bytes());
+            buffer.write('[');
+            buffer.write(arrayNl.unsafeBytes(), arrayNl.begin(), arrayNl.realSize());
             boolean firstItem = true;
 
             for (int i = 0, t = object.getLength(); i < t; i++) {
@@ -371,9 +365,12 @@ public final class Generator {
                 if (firstItem) {
                     firstItem = false;
                 } else {
-                    buffer.write(delim);
+                    buffer.write(',');
+                    if (arrayNl.length() > 0) {
+                        buffer.write(arrayNl.unsafeBytes(), arrayNl.begin(), arrayNl.length());
+                    }
                 }
-                buffer.write(shift);
+                Utils.repeatWrite(buffer, indentUnit, depth);
                 Handler<? super IRubyObject> handler = getHandlerFor(runtime, element);
                 handler.generate(context, session, element, buffer);
             }
@@ -381,10 +378,10 @@ public final class Generator {
             state.decreaseDepth();
             if (!arrayNl.isEmpty()) {
                 buffer.write(arrayNl.bytes());
-                buffer.write(shift, 0, state.getDepth() * indentUnit.length());
+                Utils.repeatWrite(buffer, indentUnit, state.getDepth());
             }
 
-            buffer.write((byte)']');
+            buffer.write((byte) ']');
         }
     }
 
