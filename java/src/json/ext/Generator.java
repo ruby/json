@@ -229,34 +229,54 @@ public final class Generator {
 
     /* Handlers */
 
-    static final Handler<RubyBignum> BIGNUM_HANDLER =
-        new Handler<RubyBignum>() {
-            @Override
-            void generate(ThreadContext context, Session session, RubyBignum object, OutputStream buffer) throws IOException {
-                BigInteger bigInt = object.getValue();
-                buffer.write(bigInt.toString().getBytes(UTF_8));
-            }
-        };
+    static final Handler<RubyBignum> BIGNUM_HANDLER = new BignumHandler();
+    static final Handler<RubyFixnum> FIXNUM_HANDLER = new FixnumHandler();
+    static final Handler<RubyFloat> FLOAT_HANDLER = new FloatHandler();
+    static final Handler<RubyArray<IRubyObject>> ARRAY_HANDLER = new ArrayHandler();
+    static final Handler<RubyHash> HASH_HANDLER = new HashHandler();
+    static final Handler<RubyString> STRING_HANDLER = new StringHandler();
+    static final Handler<RubyBoolean> TRUE_HANDLER = new KeywordHandler<>("true");
+    static final Handler<RubyBoolean> FALSE_HANDLER = new KeywordHandler<>("false");
+    static final Handler<IRubyObject> NIL_HANDLER = new KeywordHandler<>("null");
 
-    static final Handler<RubyFixnum> FIXNUM_HANDLER =
-        new Handler<RubyFixnum>() {
-            @Override
-            void generate(ThreadContext context, Session session, RubyFixnum object, OutputStream buffer) throws IOException {
-                long i = object.getLongValue();
-                if (i == 0) {
-                    buffer.write(ZERO_BYTES);
-                } else if (i == Long.MIN_VALUE) {
-                    buffer.write(MIN_VALUE_BYTES_RADIX_10);
-                } else {
-                    boolean neg = i < 0;
-                    if (neg) i = -i;
-                    int newSize = sizeWithDecimalString(i, neg, 0);
-                    byte[] charBytes = session.getCharBytes();
-                    writeDecimalDigitsToArray(charBytes, i, neg, 0, 0, newSize);
-                    buffer.write(charBytes, 0, newSize);
-                }
+    /**
+     * The default handler (<code>Object#to_json</code>): coerces the object
+     * to string using <code>#to_s</code>, and serializes that string.
+     */
+    static final Handler<IRubyObject> OBJECT_HANDLER = new ObjectHandler();
+
+    /**
+     * A handler that simply calls <code>#to_json(state)</code> on the
+     * given object.
+     */
+    static final Handler<IRubyObject> GENERIC_HANDLER = new GenericHandler();
+
+    private static class BignumHandler extends Handler<RubyBignum> {
+        @Override
+        void generate(ThreadContext context, Session session, RubyBignum object, OutputStream buffer) throws IOException {
+            BigInteger bigInt = object.getValue();
+            buffer.write(bigInt.toString().getBytes(UTF_8));
+        }
+    }
+
+    private static class FixnumHandler extends Handler<RubyFixnum> {
+        @Override
+        void generate(ThreadContext context, Session session, RubyFixnum object, OutputStream buffer) throws IOException {
+            long i = object.getLongValue();
+            if (i == 0) {
+                buffer.write(ZERO_BYTES);
+            } else if (i == Long.MIN_VALUE) {
+                buffer.write(MIN_VALUE_BYTES_RADIX_10);
+            } else {
+                boolean neg = i < 0;
+                if (neg) i = -i;
+                int newSize = sizeWithDecimalString(i, neg, 0);
+                byte[] charBytes = session.getCharBytes();
+                writeDecimalDigitsToArray(charBytes, i, neg, 0, 0, newSize);
+                buffer.write(charBytes, 0, newSize);
             }
-        };
+        }
+    }
 
     private static final byte[] ZERO_BYTES = new byte[] {(byte)'0'};
     private static final byte[] MIN_VALUE_BYTES_RADIX_10;
@@ -292,131 +312,128 @@ public final class Generator {
         return (byte) (i % 10 + '0');
     }
 
-    static final Handler<RubyFloat> FLOAT_HANDLER =
-        new Handler<RubyFloat>() {
-            @Override
-            void generate(ThreadContext context, Session session, RubyFloat object, OutputStream buffer) throws IOException {
-                double value = object.getValue();
+    private static class FloatHandler extends Handler<RubyFloat> {
+        @Override
+        void generate(ThreadContext context, Session session, RubyFloat object, OutputStream buffer) throws IOException {
+            double value = object.getValue();
 
-                if (Double.isInfinite(value) || Double.isNaN(value)) {
-                    if (!session.getState(context).allowNaN()) {
-                        throw Utils.buildGeneratorError(context, object, object + " not allowed in JSON").toThrowable();
-                    }
+            if (Double.isInfinite(value) || Double.isNaN(value)) {
+                if (!session.getState(context).allowNaN()) {
+                    throw Utils.buildGeneratorError(context, object, object + " not allowed in JSON").toThrowable();
                 }
-
-                buffer.write(Double.toString(value).getBytes(UTF_8));
             }
-        };
+
+            buffer.write(Double.toString(value).getBytes(UTF_8));
+        }
+    }
 
     private static final byte[] EMPTY_ARRAY_BYTES = "[]".getBytes();
-    static final Handler<RubyArray<IRubyObject>> ARRAY_HANDLER =
-        new Handler<RubyArray<IRubyObject>>() {
-            @Override
-            int guessSize(ThreadContext context, Session session, RubyArray<IRubyObject> object) {
-                GeneratorState state = session.getState(context);
-                int depth = state.getDepth();
-                int perItem =
+    private static class ArrayHandler extends Handler<RubyArray<IRubyObject>> {
+        @Override
+        int guessSize(ThreadContext context, Session session, RubyArray<IRubyObject> object) {
+            GeneratorState state = session.getState(context);
+            int depth = state.getDepth();
+            int perItem =
                     4                                           // prealloc
-                    + (depth + 1) * state.getIndent().length()  // indent
-                    + 1 + state.getArrayNl().length();          // ',' arrayNl
-                return 2 + object.size() * perItem;
-            }
+                            + (depth + 1) * state.getIndent().length()  // indent
+                            + 1 + state.getArrayNl().length();          // ',' arrayNl
+            return 2 + object.size() * perItem;
+        }
 
-            @Override
-            void generate(ThreadContext context, Session session, RubyArray<IRubyObject> object, OutputStream buffer) throws IOException {
-                GeneratorState state = session.getState(context);
-                int depth = state.increaseDepth(context);
+        @Override
+        void generate(ThreadContext context, Session session, RubyArray<IRubyObject> object, OutputStream buffer) throws IOException {
+            GeneratorState state = session.getState(context);
+            int depth = state.increaseDepth(context);
 
-                if (object.isEmpty()) {
-                    buffer.write(EMPTY_ARRAY_BYTES);
-                    state.decreaseDepth();
-                    return;
-                }
-
-                Ruby runtime = context.runtime;
-
-                ByteList indentUnit = state.getIndent();
-                byte[] shift = Utils.repeat(indentUnit, depth);
-
-                ByteList arrayNl = state.getArrayNl();
-                byte[] delim = new byte[1 + arrayNl.length()];
-                delim[0] = ',';
-                System.arraycopy(arrayNl.unsafeBytes(), arrayNl.begin(), delim, 1,
-                        arrayNl.length());
-
-                buffer.write((byte)'[');
-                buffer.write(arrayNl.bytes());
-                boolean firstItem = true;
-
-                for (int i = 0, t = object.getLength(); i < t; i++) {
-                    IRubyObject element = object.eltInternal(i);
-                    if (firstItem) {
-                        firstItem = false;
-                    } else {
-                        buffer.write(delim);
-                    }
-                    buffer.write(shift);
-                    Handler<? super IRubyObject> handler = getHandlerFor(runtime, element);
-                    handler.generate(context, session, element, buffer);
-                }
-
+            if (object.isEmpty()) {
+                buffer.write(EMPTY_ARRAY_BYTES);
                 state.decreaseDepth();
-                if (!arrayNl.isEmpty()) {
-                    buffer.write(arrayNl.bytes());
-                    buffer.write(shift, 0, state.getDepth() * indentUnit.length());
-                }
-
-                buffer.write((byte)']');
+                return;
             }
-        };
+
+            Ruby runtime = context.runtime;
+
+            ByteList indentUnit = state.getIndent();
+            byte[] shift = Utils.repeat(indentUnit, depth);
+
+            ByteList arrayNl = state.getArrayNl();
+            byte[] delim = new byte[1 + arrayNl.length()];
+            delim[0] = ',';
+            System.arraycopy(arrayNl.unsafeBytes(), arrayNl.begin(), delim, 1,
+                    arrayNl.length());
+
+            buffer.write((byte)'[');
+            buffer.write(arrayNl.bytes());
+            boolean firstItem = true;
+
+            for (int i = 0, t = object.getLength(); i < t; i++) {
+                IRubyObject element = object.eltInternal(i);
+                if (firstItem) {
+                    firstItem = false;
+                } else {
+                    buffer.write(delim);
+                }
+                buffer.write(shift);
+                Handler<? super IRubyObject> handler = getHandlerFor(runtime, element);
+                handler.generate(context, session, element, buffer);
+            }
+
+            state.decreaseDepth();
+            if (!arrayNl.isEmpty()) {
+                buffer.write(arrayNl.bytes());
+                buffer.write(shift, 0, state.getDepth() * indentUnit.length());
+            }
+
+            buffer.write((byte)']');
+        }
+    }
 
     private static final byte[] EMPTY_HASH_BYTES = "{}".getBytes();
-    static final Handler<RubyHash> HASH_HANDLER =
-        new Handler<RubyHash>() {
-            @Override
-            int guessSize(ThreadContext context, Session session, RubyHash object) {
-                GeneratorState state = session.getState(context);
-                int perItem =
+    private static class HashHandler extends Handler<RubyHash> {
+        @Override
+        int guessSize(ThreadContext context, Session session, RubyHash object) {
+            GeneratorState state = session.getState(context);
+            int perItem =
                     12    // key, colon, comma
-                    + (state.getDepth() + 1) * state.getIndent().length()
-                    + state.getSpaceBefore().length()
-                    + state.getSpace().length();
-                return 2 + object.size() * perItem;
-            }
+                            + (state.getDepth() + 1) * state.getIndent().length()
+                            + state.getSpaceBefore().length()
+                            + state.getSpace().length();
+            return 2 + object.size() * perItem;
+        }
 
-            @Override
-            void generate(ThreadContext context, final Session session, RubyHash object, final OutputStream buffer) throws IOException {
-                final GeneratorState state = session.getState(context);
-                final int depth = state.increaseDepth(context);
+        @Override
+        void generate(ThreadContext context, final Session session, RubyHash object, final OutputStream buffer) throws IOException {
+            final GeneratorState state = session.getState(context);
+            final int depth = state.increaseDepth(context);
 
-                if (object.isEmpty()) {
-                    buffer.write(EMPTY_HASH_BYTES);
-                    state.decreaseDepth();
-                    return;
-                }
-
-                final ByteList objectNl = state.getObjectNl();
-                byte[] objectNLBytes = objectNl.unsafeBytes();
-                final byte[] indent = Utils.repeat(state.getIndent(), depth);
-                final ByteList spaceBefore = state.getSpaceBefore();
-                final ByteList space = state.getSpace();
-
-                buffer.write((byte)'{');
-                buffer.write(objectNLBytes);
-
-                boolean firstPair = true;
-                for (RubyHash.RubyHashEntry entry : (Set<RubyHash.RubyHashEntry>) object.directEntrySet()) {
-                    processEntry(context, session, buffer, entry, firstPair, objectNl, indent, spaceBefore, space);
-                    firstPair = false;
-                }
+            if (object.isEmpty()) {
+                buffer.write(EMPTY_HASH_BYTES);
                 state.decreaseDepth();
-                if (!firstPair && !objectNl.isEmpty()) {
-                    buffer.write(objectNLBytes);
-                }
-                buffer.write(Utils.repeat(state.getIndent(), state.getDepth()));
-                buffer.write((byte)'}');
+                return;
             }
-        };
+
+            final ByteList objectNl = state.getObjectNl();
+            byte[] objectNLBytes = objectNl.unsafeBytes();
+            final byte[] indent = Utils.repeat(state.getIndent(), depth);
+            final ByteList spaceBefore = state.getSpaceBefore();
+            final ByteList space = state.getSpace();
+
+            buffer.write((byte)'{');
+            buffer.write(objectNLBytes);
+
+            boolean firstPair = true;
+            for (RubyHash.RubyHashEntry entry : (Set<RubyHash.RubyHashEntry>) object.directEntrySet()) {
+                processEntry(context, session, buffer, entry, firstPair, objectNl, indent, spaceBefore, space);
+                firstPair = false;
+            }
+            state.decreaseDepth();
+            if (!firstPair && !objectNl.isEmpty()) {
+                buffer.write(objectNLBytes);
+            }
+            buffer.write(Utils.repeat(state.getIndent(), state.getDepth()));
+            buffer.write((byte)'}');
+        }
+    }
 
     private static void processEntry(ThreadContext context, Session session, OutputStream buffer, RubyHash.RubyHashEntry entry, boolean firstPair, ByteList objectNl, byte[] indent, ByteList spaceBefore, ByteList space) {
         IRubyObject key = (IRubyObject) entry.getKey();
@@ -464,73 +481,55 @@ public final class Generator {
         }
     }
 
-    static final Handler<RubyString> STRING_HANDLER =
-        new Handler<RubyString>() {
-            @Override
-            int guessSize(ThreadContext context, Session session, RubyString object) {
-                // for most applications, most strings will be just a set of
-                // printable ASCII characters without any escaping, so let's
-                // just allocate enough space for that + the quotes
-                return 2 + object.getByteList().length();
-            }
+    private static class StringHandler extends Handler<RubyString> {
+        @Override
+        int guessSize(ThreadContext context, Session session, RubyString object) {
+            // for most applications, most strings will be just a set of
+            // printable ASCII characters without any escaping, so let's
+            // just allocate enough space for that + the quotes
+            return 2 + object.getByteList().length();
+        }
 
-            @Override
-            void generate(ThreadContext context, Session session, RubyString object, OutputStream buffer) throws IOException {
-                session.getStringEncoder(context).generate(context, object, buffer);
-            }
-        };
+        @Override
+        void generate(ThreadContext context, Session session, RubyString object, OutputStream buffer) throws IOException {
+            session.getStringEncoder(context).generate(context, object, buffer);
+        }
+    }
 
-    static final Handler<RubyBoolean> TRUE_HANDLER =
-            new KeywordHandler<>("true");
-    static final Handler<RubyBoolean> FALSE_HANDLER =
-            new KeywordHandler<>("false");
-    static final Handler<IRubyObject> NIL_HANDLER =
-            new KeywordHandler<>("null");
+    private static class ObjectHandler extends Handler<IRubyObject> {
+        @Override
+        RubyString generateNew(ThreadContext context, Session session, IRubyObject object) {
+            RubyString str = object.asString();
+            return STRING_HANDLER.generateNew(context, session, str);
+        }
 
-    /**
-     * The default handler (<code>Object#to_json</code>): coerces the object
-     * to string using <code>#to_s</code>, and serializes that string.
-     */
-    static final Handler<IRubyObject> OBJECT_HANDLER =
-        new Handler<IRubyObject>() {
-            @Override
-            RubyString generateNew(ThreadContext context, Session session, IRubyObject object) {
-                RubyString str = object.asString();
-                return STRING_HANDLER.generateNew(context, session, str);
-            }
+        @Override
+        void generate(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
+            RubyString str = object.asString();
+            STRING_HANDLER.generate(context, session, str, buffer);
+        }
+    }
 
-            @Override
-            void generate(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
-                RubyString str = object.asString();
-                STRING_HANDLER.generate(context, session, str, buffer);
+    private static class GenericHandler extends Handler<IRubyObject> {
+        @Override
+        RubyString generateNew(ThreadContext context, Session session, IRubyObject object) {
+            GeneratorState state = session.getState(context);
+            if (state.strict()) {
+                throw Utils.buildGeneratorError(context, object, object + " not allowed in JSON").toThrowable();
+            } else if (object.respondsTo("to_json")) {
+                IRubyObject result = object.callMethod(context, "to_json", state);
+                if (result instanceof RubyString) return (RubyString)result;
+                throw context.runtime.newTypeError("to_json must return a String");
+            } else {
+                return OBJECT_HANDLER.generateNew(context, session, object);
             }
-        };
+        }
 
-    /**
-     * A handler that simply calls <code>#to_json(state)</code> on the
-     * given object.
-     */
-    static final Handler<IRubyObject> GENERIC_HANDLER =
-        new Handler<IRubyObject>() {
-            @Override
-            RubyString generateNew(ThreadContext context, Session session, IRubyObject object) {
-                GeneratorState state = session.getState(context);
-                if (state.strict()) {
-                    throw Utils.buildGeneratorError(context, object, object + " not allowed in JSON").toThrowable();
-                } else if (object.respondsTo("to_json")) {
-                    IRubyObject result = object.callMethod(context, "to_json", state);
-                    if (result instanceof RubyString) return (RubyString)result;
-                    throw context.runtime.newTypeError("to_json must return a String");
-                } else {
-                    return OBJECT_HANDLER.generateNew(context, session, object);
-                }
-            }
-
-            @Override
-            void generate(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
-                RubyString result = generateNew(context, session, object);
-                ByteList bytes = result.getByteList();
-                buffer.write(bytes.unsafeBytes(), bytes.begin(), bytes.length());
-            }
-        };
+        @Override
+        void generate(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
+            RubyString result = generateNew(context, session, object);
+            ByteList bytes = result.getByteList();
+            buffer.write(bytes.unsafeBytes(), bytes.begin(), bytes.length());
+        }
+    }
 }
