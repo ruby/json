@@ -84,17 +84,25 @@ final class Utils {
 
     static byte[] repeat(byte[] a, int begin, int length, int n) {
         if (length == 0) return ByteList.NULL_ARRAY;
+
+        if (n == 1 && begin == 0 && length == a.length) return a;
+
         int resultLen = length * n;
         byte[] result = new byte[resultLen];
         for (int pos = 0; pos < resultLen; pos += length) {
             System.arraycopy(a, begin, result, pos, length);
         }
+
         return result;
     }
 
     static void repeatWrite(OutputStream out, ByteList a, int n) throws IOException {
+        byte[] bytes = a.unsafeBytes();
+        int begin = a.begin();
+        int length = a.length();
+
         for (int i = 0; i < n; i++) {
-            out.write(a.unsafeBytes(), a.begin(), a.length());
+            out.write(bytes, begin, length);
         }
     }
 }
