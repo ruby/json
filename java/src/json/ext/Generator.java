@@ -302,12 +302,8 @@ public final class Generator {
         } else if (i == Long.MIN_VALUE) {
             buffer.write(MIN_VALUE_BYTES_RADIX_10);
         } else {
-            boolean neg = i < 0;
-            if (neg) i = -i;
-            int newSize = sizeWithDecimalString(i, neg, 0);
             byte[] charBytes = session.getCharBytes();
-            writeDecimalDigitsToArray(charBytes, i, neg, 0, 0, newSize);
-            buffer.write(charBytes, 0, newSize);
+            appendFixnum(buffer, charBytes, i);
         }
     }
 
@@ -318,32 +314,24 @@ public final class Generator {
         MIN_VALUE_BYTES_RADIX_10 = ByteList.plain(Long.toString(Long.MIN_VALUE, 10));
     }
 
-    private static int sizeWithDecimalString(long i, boolean neg, int baseSize) {
-        int count = 0;
-        while (i > 9) {
-            i /= 10;
-            count++;
-        }
-        int newSize = baseSize + count + 1;
-
-        if (neg) newSize++;
-
-        return newSize;
+    // C: fbuffer_append_long
+    static void appendFixnum(OutputStream buffer, byte[] buf, long number) throws IOException {
+        int buffer_end = buf.length;
+        int len = fltoa(number, buf, buffer_end - 1);
+        buffer.write(buf, buffer_end - len, len);
     }
 
-    private static void writeDecimalDigitsToArray(byte[] bytes, long i, boolean negative, int begin, int originalSize, int newSize) {
-        // write digits directly into the prepared byte array
-        for (int n = newSize - 1; i > 0; n--) {
-            bytes[begin + n] = decimalByteForDigit(i);
-            i /= 10;
-        }
+    static int fltoa(long number, byte[] buf, int end) {
+        long sign = number;
+        int tmp = end;
 
-        if (negative) bytes[originalSize] = '-';
+        if (sign < 0) number = -number;
+        do buf[tmp--] = (byte) digits[(int) (number % 10)]; while ((number /= 10) != 0);
+        if (sign < 0) buf[tmp--] = '-';
+        return end - tmp;
     }
 
-    private static byte decimalByteForDigit(long i) {
-        return (byte) (i % 10 + '0');
-    }
+    private static final char[] digits = {'0', '1','2','3','4','5','6','7','8','9'};
 
     private static class FloatHandler extends Handler<RubyFloat> {
         @Override
