@@ -536,8 +536,8 @@ public class GeneratorState extends RubyObject {
         return depth;
     }
 
-    public void decreaseDepth() {
-        --depth;
+    public int decreaseDepth() {
+        return --depth;
     }
 
     /**

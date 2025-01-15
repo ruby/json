@@ -390,14 +390,11 @@ public final class Generator {
 
         buffer.write('[');
         buffer.write(arrayNLBytes, arrayNLBegin, arrayNLSize);
-        boolean firstItem = true;
 
         int length = object.getLength();
-        for (int i = 0, t = length; i < t; i++) {
+        for (int i = 0; i < length; i++) {
             IRubyObject element = object.eltInternal(i);
-            if (firstItem) {
-                firstItem = false;
-            } else {
+            if (i > 0) {
                 buffer.write(',');
                 if (!arrayNLEmpty) {
                     buffer.write(arrayNLBytes, arrayNLBegin, arrayNLSize);
@@ -407,10 +404,10 @@ public final class Generator {
             generateFor(context, session, element, buffer);
         }
 
-        state.decreaseDepth();
+        int oldDepth = state.decreaseDepth();
         if (!arrayNLEmpty) {
             buffer.write(arrayNLBytes, arrayNLBegin, arrayNLSize);
-            Utils.repeatWrite(buffer, indentUnit, state.getDepth());
+            Utils.repeatWrite(buffer, indentUnit, oldDepth);
         }
 
         buffer.write((byte) ']');
@@ -451,7 +448,7 @@ public final class Generator {
         final ByteList spaceBefore = state.getSpaceBefore();
         final ByteList space = state.getSpace();
 
-        buffer.write((byte)'{');
+        buffer.write('{');
         buffer.write(objectNLBytes);
 
         boolean firstPair = true;
@@ -459,11 +456,11 @@ public final class Generator {
             processEntry(context, session, buffer, entry, firstPair, objectNl, indent, spaceBefore, space);
             firstPair = false;
         }
-        state.decreaseDepth();
+        int oldDepth = state.decreaseDepth();
         if (!firstPair && !objectNl.isEmpty()) {
             buffer.write(objectNLBytes);
         }
-        buffer.write(Utils.repeat(state.getIndent(), state.getDepth()));
+        Utils.repeatWrite(buffer, state.getIndent(), oldDepth);
         buffer.write((byte)'}');
     }
 
