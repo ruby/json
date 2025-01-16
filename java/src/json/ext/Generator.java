@@ -16,6 +16,7 @@ import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
 import org.jruby.RubyHash;
 import org.jruby.RubyString;
+import org.jruby.RubySymbol;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
@@ -486,7 +487,7 @@ public final class Generator {
                     keyStr = key.callMethod(context, "to_s");
                 }
             } else if (keyClass == runtime.getSymbol()) {
-                keyStr = key.asString();
+                keyStr = ((RubySymbol) key).id2name(context);
             } else {
                 keyStr = TypeConverter.convertToType(key, runtime.getString(), "to_s");
             }
