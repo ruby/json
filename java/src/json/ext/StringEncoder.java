@@ -141,13 +141,7 @@ final class StringEncoder extends ByteListTranscoder {
 
     // C: generate_json_string
     void generate(ThreadContext context, RubyString object, OutputStream buffer) throws IOException {
-        try {
-            object = ensureValidEncoding(context, object);
-        } catch (RaiseException re) {
-            RubyException exc = Utils.buildGeneratorError(context, object, re.getMessage());
-            exc.setCause(re.getException());
-            throw exc.toThrowable();
-        }
+        object = ensureValidEncoding(context, object);
 
         ByteList byteList = object.getByteList();
         init(byteList);
@@ -171,24 +165,38 @@ final class StringEncoder extends ByteListTranscoder {
 
     static RubyString ensureValidEncoding(ThreadContext context, RubyString str) {
         Encoding encoding = str.getEncoding();
-        RubyString utf8String;
-        if (!(encoding == USASCIIEncoding.INSTANCE || encoding == UTF8Encoding.INSTANCE)) {
-            if (encoding == ASCIIEncoding.INSTANCE) {
-                utf8String = str.strDup(context.runtime);
-                utf8String.setEncoding(UTF8Encoding.INSTANCE);
-                switch (utf8String.getCodeRange()) {
-                    case StringSupport.CR_7BIT:
-                        return utf8String;
-                    case StringSupport.CR_VALID:
-                        // For historical reason, we silently reinterpret binary strings as UTF-8 if it would work.
-                        // TODO: Raise in 3.0.0
-                        context.runtime.getWarnings().warn("JSON.generate: UTF-8 string passed as BINARY, this will raise an encoding error in json 3.0");
-                        return utf8String;
-                }
-            }
 
-            str = (RubyString) str.encode(context, context.runtime.getEncodingService().convertEncodingToRubyEncoding(UTF8Encoding.INSTANCE));
+        if (encoding == USASCIIEncoding.INSTANCE || encoding == UTF8Encoding.INSTANCE) {
+            return str;
         }
+
+        return tryWeirdEncodings(context, str, encoding);
+    }
+
+    private static RubyString tryWeirdEncodings(ThreadContext context, RubyString str, Encoding encoding) {
+        RubyString utf8String;
+        if (encoding == ASCIIEncoding.INSTANCE) {
+            utf8String = str.strDup(context.runtime);
+            utf8String.setEncoding(UTF8Encoding.INSTANCE);
+            switch (utf8String.getCodeRange()) {
+                case StringSupport.CR_7BIT:
+                    return utf8String;
+                case StringSupport.CR_VALID:
+                    // For historical reason, we silently reinterpret binary strings as UTF-8 if it would work.
+                    // TODO: Raise in 3.0.0
+                    context.runtime.getWarnings().warn("JSON.generate: UTF-8 string passed as BINARY, this will raise an encoding error in json 3.0");
+                    return utf8String;
+            }
+        }
+
+        try {
+            str = (RubyString) str.encode(context, context.runtime.getEncodingService().convertEncodingToRubyEncoding(UTF8Encoding.INSTANCE));
+        } catch (RaiseException re) {
+            RubyException exc = Utils.buildGeneratorError(context, str, re.getMessage());
+            exc.setCause(re.getException());
+            throw exc.toThrowable();
+        }
+
         return str;
     }
 
