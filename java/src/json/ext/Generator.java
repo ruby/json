@@ -185,7 +185,9 @@ public final class Generator {
         public StringEncoder getStringEncoder(ThreadContext context) {
             if (stringEncoder == null) {
                 GeneratorState state = getState(context);
-                stringEncoder = new StringEncoder(state.asciiOnly(), state.scriptSafe());
+                stringEncoder = state.asciiOnly() ?
+                        new StringEncoderAsciiOnly(state.scriptSafe()) :
+                        new StringEncoder(state.scriptSafe());
             }
             return stringEncoder;
         }
