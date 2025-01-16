@@ -107,10 +107,12 @@ final class StringEncoder extends ByteListTranscoder {
             //First byte of a 4+ byte code point
             4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 9, 9,
     };
+
     private static final byte[] BACKSLASH_U2028 = "\\u2028".getBytes(StandardCharsets.US_ASCII);
     private static final byte[] BACKSLASH_U2029 = "\\u2029".getBytes(StandardCharsets.US_ASCII);
 
     private final boolean asciiOnly, scriptSafe;
+    private final byte[] escapeTable;
 
     OutputStream out;
 
@@ -137,6 +139,11 @@ final class StringEncoder extends ByteListTranscoder {
     StringEncoder(boolean asciiOnly, boolean scriptSafe) {
         this.asciiOnly = asciiOnly;
         this.scriptSafe = scriptSafe;
+        if (asciiOnly) {
+            escapeTable = scriptSafe ? SCRIPT_SAFE_ESCAPE_TABLE : ASCII_ONLY_ESCAPE_TABLE;
+        } else {
+            escapeTable = scriptSafe ? SCRIPT_SAFE_ESCAPE_TABLE : ESCAPE_TABLE;
+        }
     }
 
     // C: generate_json_string
@@ -151,9 +158,9 @@ final class StringEncoder extends ByteListTranscoder {
             case StringSupport.CR_7BIT:
             case StringSupport.CR_VALID:
                 if (asciiOnly) {
-                    encodeASCII(byteList, scriptSafe ? SCRIPT_SAFE_ESCAPE_TABLE : ASCII_ONLY_ESCAPE_TABLE);
+                    encodeASCII(byteList);
                 } else {
-                    encode(byteList, scriptSafe ? SCRIPT_SAFE_ESCAPE_TABLE : ESCAPE_TABLE);
+                    encode(byteList);
                 }
                 break;
             default:
@@ -201,9 +208,10 @@ final class StringEncoder extends ByteListTranscoder {
     }
 
     // C: convert_UTF8_to_JSON
-    void encode(ByteList src, byte[] escape_table) throws IOException {
+    void encode(ByteList src) throws IOException {
         byte[] hexdig = HEX;
         byte[] scratch = aux;
+        byte[] escapeTable = this.escapeTable;
 
         byte[] ptrBytes = src.unsafeBytes();
         int ptr = src.begin();
@@ -211,10 +219,10 @@ final class StringEncoder extends ByteListTranscoder {
 
         int beg = 0;
         int pos = 0;
-        
+
         while (pos < len) {
             int ch = Byte.toUnsignedInt(ptrBytes[ptr + pos]);
-            int ch_len = escape_table[ch];
+            int ch_len = escapeTable[ch];
             /* JSON encoding */
 
             if (ch_len > 0) {
@@ -278,9 +286,10 @@ final class StringEncoder extends ByteListTranscoder {
     }
 
     // C: convert_UTF8_to_ASCII_only_JSON
-    void encodeASCII(ByteList src, byte[] escape_table) throws IOException {
+    void encodeASCII(ByteList src) throws IOException {
         byte[] hexdig = HEX;
         byte[] scratch = aux;
+        byte[] escapeTable = this.escapeTable;
 
         byte[] ptrBytes = src.unsafeBytes();
         int ptr = src.begin();
@@ -291,7 +300,7 @@ final class StringEncoder extends ByteListTranscoder {
 
         while (pos < len) {
             int ch = Byte.toUnsignedInt(ptrBytes[ptr + pos]);
-            int ch_len = escape_table[ch];
+            int ch_len = escapeTable[ch];
 
             if (ch_len != 0) {
                 switch (ch_len) {

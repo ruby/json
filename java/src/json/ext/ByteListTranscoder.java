@@ -143,9 +143,11 @@ abstract class ByteListTranscoder {
      *               until the character before it.
      */
     protected void quoteStop(int endPos) throws IOException {
+        int quoteStart = this.quoteStart;
         if (quoteStart != -1) {
+            ByteList src = this.src;
             append(src.unsafeBytes(), src.begin() + quoteStart, endPos - quoteStart);
-            quoteStart = -1;
+            this.quoteStart = -1;
         }
     }
 
