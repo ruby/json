@@ -298,7 +298,7 @@ public final class Generator {
         }
     }
 
-    private static void generateFixnum(Session session, RubyFixnum object, OutputStream buffer) throws IOException {
+    static void generateFixnum(Session session, RubyFixnum object, OutputStream buffer) throws IOException {
         long i = object.getLongValue();
         if (i == 0) {
             buffer.write('0');
@@ -339,7 +339,7 @@ public final class Generator {
         }
     }
 
-    private static void generateFloat(ThreadContext context, Session session, RubyFloat object, OutputStream buffer) throws IOException {
+    static void generateFloat(ThreadContext context, Session session, RubyFloat object, OutputStream buffer) throws IOException {
         double value = object.getValue();
 
         if (Double.isInfinite(value) || Double.isNaN(value)) {
@@ -370,7 +370,7 @@ public final class Generator {
         }
     }
 
-    private static void generateArray(ThreadContext context, Session session, RubyArray<IRubyObject> object, OutputStream buffer) throws IOException {
+    static void generateArray(ThreadContext context, Session session, RubyArray<IRubyObject> object, OutputStream buffer) throws IOException {
         GeneratorState state = session.getState(context);
         int depth = state.increaseDepth(context);
 
@@ -431,7 +431,7 @@ public final class Generator {
         }
     }
 
-    private static void generateHash(ThreadContext context, Session session, RubyHash object, OutputStream buffer) throws IOException {
+    static void generateHash(ThreadContext context, Session session, RubyHash object, OutputStream buffer) throws IOException {
         final GeneratorState state = session.getState(context);
         final int depth = state.increaseDepth(context);
 
@@ -522,7 +522,7 @@ public final class Generator {
         }
     }
 
-    private static void generateString(ThreadContext context, Session session, RubyString object, OutputStream buffer) throws IOException {
+    static void generateString(ThreadContext context, Session session, RubyString object, OutputStream buffer) throws IOException {
         session.getStringEncoder(context).generate(context, object, buffer);
     }
 
@@ -538,12 +538,12 @@ public final class Generator {
         }
     }
 
-    private static RubyString generateObjectNew(ThreadContext context, Session session, IRubyObject object) {
+    static RubyString generateObjectNew(ThreadContext context, Session session, IRubyObject object) {
         RubyString str = object.asString();
         return STRING_HANDLER.generateNew(context, session, str);
     }
 
-    private static void generateObject(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
+    static void generateObject(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
         generateString(context, session, object.asString(), buffer);
     }
 
@@ -559,7 +559,7 @@ public final class Generator {
         }
     }
 
-    private static RubyString generateGenericNew(ThreadContext context, Session session, IRubyObject object) {
+    static RubyString generateGenericNew(ThreadContext context, Session session, IRubyObject object) {
         GeneratorState state = session.getState(context);
         if (state.strict()) {
             throw Utils.buildGeneratorError(context, object, object + " not allowed in JSON").toThrowable();
@@ -572,7 +572,7 @@ public final class Generator {
         }
     }
 
-    private static void generateGeneric(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
+    static void generateGeneric(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
         RubyString result = generateGenericNew(context, session, object);
         ByteList bytes = result.getByteList();
         buffer.write(bytes.unsafeBytes(), bytes.begin(), bytes.length());
