@@ -462,7 +462,7 @@ public final class Generator {
             buffer.write(objectNLBytes);
         }
         Utils.repeatWrite(buffer, state.getIndent(), oldDepth);
-        buffer.write((byte)'}');
+        buffer.write('}');
     }
 
     private static void processEntry(ThreadContext context, Session session, OutputStream buffer, RubyHash.RubyHashEntry entry, boolean firstPair, ByteList objectNl, byte[] indent, ByteList spaceBefore, ByteList space) {
