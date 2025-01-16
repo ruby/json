@@ -301,8 +301,9 @@ public final class Generator {
     private static void generateFixnum(Session session, RubyFixnum object, OutputStream buffer) throws IOException {
         long i = object.getLongValue();
         if (i == 0) {
-            buffer.write(ZERO_BYTES);
+            buffer.write('0');
         } else if (i == Long.MIN_VALUE) {
+            // special case to avoid -i
             buffer.write(MIN_VALUE_BYTES_RADIX_10);
         } else {
             byte[] charBytes = session.getCharBytes();
@@ -310,31 +311,26 @@ public final class Generator {
         }
     }
 
-    private static final byte[] ZERO_BYTES = new byte[] {(byte)'0'};
-    private static final byte[] MIN_VALUE_BYTES_RADIX_10;
-
-    static {
-        MIN_VALUE_BYTES_RADIX_10 = ByteList.plain(Long.toString(Long.MIN_VALUE, 10));
-    }
+    private static final byte[] MIN_VALUE_BYTES_RADIX_10 = ByteList.plain(Long.toString(Long.MIN_VALUE, 10));
 
     // C: fbuffer_append_long
     static void appendFixnum(OutputStream buffer, byte[] buf, long number) throws IOException {
-        int buffer_end = buf.length;
-        int len = fltoa(number, buf, buffer_end - 1);
-        buffer.write(buf, buffer_end - len, len);
+        int end = buf.length;
+        int len = fltoa(number, buf, end);
+        buffer.write(buf, end - len, len);
     }
 
     static int fltoa(long number, byte[] buf, int end) {
-        long sign = number;
+        boolean negative = number < 0;
         int tmp = end;
 
-        if (sign < 0) number = -number;
-        do buf[tmp--] = (byte) digits[(int) (number % 10)]; while ((number /= 10) != 0);
-        if (sign < 0) buf[tmp--] = '-';
+        if (negative) number = -number;
+        do {
+            buf[--tmp] = (byte) ((int) (number % 10) + '0');
+        } while ((number /= 10) != 0);
+        if (negative) buf[--tmp] = '-';
         return end - tmp;
     }
-
-    private static final char[] digits = {'0', '1','2','3','4','5','6','7','8','9'};
 
     private static class FloatHandler extends Handler<RubyFloat> {
         @Override
