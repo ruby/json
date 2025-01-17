@@ -1,7 +1,13 @@
 require "benchmark/ips"
 require "json"
-require "oj"
-require "rapidjson"
+begin
+  require "oj"
+rescue LoadError
+end
+begin
+  require "rapidjson"
+rescue LoadError
+end
 
 if ENV["ONLY"]
   RUN = ENV["ONLY"].split(/[,: ]/).map{|x| [x.to_sym, true] }.to_h
@@ -18,9 +24,13 @@ def benchmark_parsing(name, json_output)
 
   Benchmark.ips do |x|
     x.report("json")      { JSON.parse(json_output) } if RUN[:json]
-    x.report("oj")        { Oj.load(json_output) } if RUN[:oj]
-    x.report("Oj::Parser") { Oj::Parser.new(:usual).parse(json_output) } if RUN[:oj]
-    x.report("rapidjson") { RapidJSON.parse(json_output) } if RUN[:rapidjson]
+    if defined?(Oj)
+      x.report("oj")        { Oj.load(json_output) } if RUN[:oj]
+      x.report("Oj::Parser") { Oj::Parser.new(:usual).parse(json_output) } if RUN[:oj]
+    end
+    if defined?(RapidJSON)
+      x.report("rapidjson") { RapidJSON.parse(json_output) } if RUN[:rapidjson]
+    end
     x.compare!(order: :baseline)
   end
   puts
