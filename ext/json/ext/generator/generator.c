@@ -192,60 +192,142 @@ static inline void convert_UTF8_to_JSON(FBuffer *out_buffer, VALUE str, const un
     unsigned long beg = 0, pos = 0;
 
 #define FLUSH_POS(bytes) if (pos > beg) { fbuffer_append(out_buffer, &ptr[beg], pos - beg); } pos += bytes; beg = pos;
+#define PROCESS_BYTE if (RB_UNLIKELY(ch_len)) { \
+            switch (ch_len) { \
+                case 9: { \
+                    FLUSH_POS(1); \
+                    switch (ch) { \
+                        case '"':  fbuffer_append(out_buffer, "\\\"", 2); break; \
+                        case '\\': fbuffer_append(out_buffer, "\\\\", 2); break; \
+                        case '/':  fbuffer_append(out_buffer, "\\/", 2); break; \
+                        case '\b': fbuffer_append(out_buffer, "\\b", 2); break; \
+                        case '\f': fbuffer_append(out_buffer, "\\f", 2); break; \
+                        case '\n': fbuffer_append(out_buffer, "\\n", 2); break; \
+                        case '\r': fbuffer_append(out_buffer, "\\r", 2); break; \
+                        case '\t': fbuffer_append(out_buffer, "\\t", 2); break; \
+                        default: { \
+                            scratch[2] = '0'; \
+                            scratch[3] = '0'; \
+                            scratch[4] = hexdig[(ch >> 4) & 0xf]; \
+                            scratch[5] = hexdig[ch & 0xf]; \
+                            fbuffer_append(out_buffer, scratch, 6); \
+                            break; \
+                        } \
+                    } \
+                    break; \
+                } \
+                case 11: { \
+                    unsigned char b2 = ptr[pos + 1]; \
+                    if (RB_UNLIKELY(b2 == 0x80)) { \
+                        unsigned char b3 = ptr[pos + 2]; \
+                        if (b3 == 0xA8) { \
+                            FLUSH_POS(3); \
+                            fbuffer_append(out_buffer, "\\u2028", 6); \
+                            break; \
+                        } else if (b3 == 0xA9) { \
+                            FLUSH_POS(3); \
+                            fbuffer_append(out_buffer, "\\u2029", 6); \
+                            break; \
+                        } \
+                    } \
+                    ch_len = 3; \
+                } \
+                default: \
+                    pos += ch_len; \
+                    break; \
+            } \
+        } else { \
+            pos++; \
+        }
+
+    if (escape_table != script_safe_escape_table) {
+// Taken from: https://github.com/ruby/ruby/blob/96a5da67864a15eea7b79e552c7684ddd182f76c/string.c#L671-L748
+// TODO revisit for the compiler version check
+
+// These macros from https://graphics.stanford.edu/~seander/bithacks.html
+# if SIZEOF_UINTPTR_T == 8
+#define hasless(x,n) (((x)-~0ULL/255*(n))&~(x)&~0ULL/255*128)
+#define haszero(v) (((v) - 0x0101010101010101ULL) & ~(v) & 0x8080808080808080ULL)
+#define MASK_DOUBLEQUOTE  0x2222222222222222ULL
+#define MASK_BACKSLASH 0x5c5c5c5c5c5c5c5cULL
+# elif SIZEOF_UINTPTR_T == 4
+#define hasless(x,n) (((x)-~0UL/255*(n))&~(x)&~0UL/255*128)
+#define haszero(v) (((v) - 0x01010101UL) & ~(v) & 0x80808080UL)
+#define MASK_DOUBLEQUOTE  0x22222222UL
+#define MASK_BACKSLASH 0x5c5c5c5cUL
+# else
+#  error "don't know what to do."
+#endif
+
+        if ((pos + SIZEOF_UINTPTR_T*2) < len) {
+            /*
+            * Align the pointer to a sizeof(uintptr_t)-byte boundary.
+            * TODO: Use the same alignment technique as https://github.com/ruby/ruby/blob/96a5da67864a15eea7b79e552c7684ddd182f76c/string.c#L671-L748
+            */
+            char *char_ptr;
+            for (char_ptr = (char *) ptr; pos < len && (uintptr_t) char_ptr % SIZEOF_UINTPTR_T != 0;) {
+                unsigned long start = pos;
+                char ch = *char_ptr;
+                unsigned char ch_len = escape_table[(uint8_t) ch];
+                PROCESS_BYTE;
+                // PROCESS_BYTE might process more than one byte. Ensure we increment char_ptr appropriately.
+                char_ptr += (pos - start);
+            }
+
+            uintptr_t *lp = (uintptr_t *) char_ptr;
+
+            while (pos + SIZEOF_UINTPTR_T < len) {
+                uintptr_t chunk = *lp;
+
+                uintptr_t has_less_than_0x20 = hasless(chunk, ' ');
+
+                /*
+                 * This is effectively a memchr(3). Look for both a double quote 
+                 * and a forward slash.
+                 */
+                uintptr_t tmp1 = chunk ^ MASK_DOUBLEQUOTE;
+                uintptr_t haszero1 = haszero(tmp1);
+
+                uintptr_t tmp2 = chunk ^ MASK_BACKSLASH;
+                uintptr_t haszero2 = haszero(tmp2);
+
+                if ((has_less_than_0x20 | haszero1 | haszero2) != 0) {
+                    for(size_t i=0; i<sizeof(uintptr_t); i++) {
+                        unsigned char ch = ptr[pos];
+                        unsigned char ch_len = escape_table[ch];
+                        PROCESS_BYTE;
+                    }
+                    /*
+                     * Realign lp as the previous loop may have left us in a position that's 
+                     * no longer aligned on a sizeof(uintptr_t) boundary.
+                     */ 
+                    for (char_ptr = (char *) ptr+pos; pos < len && (uintptr_t) char_ptr % SIZEOF_UINTPTR_T != 0;) {
+                        unsigned long start = pos;
+                        char ch = *char_ptr;
+                        unsigned char ch_len = escape_table[(uint8_t) ch];
+                        PROCESS_BYTE;
+                        // This might process more than one byte. Ensure we increment char_ptr appropriately.
+                        char_ptr += (pos - start);
+                    }
+                    lp = (uintptr_t *) char_ptr;
+                } else {
+                    lp++;
+                    pos += SIZEOF_UINTPTR_T;
+                    continue;
+                }
+            }
+        }
+    }
+
+#undef hasless
+#undef haszero
 
     while (pos < len) {
         unsigned char ch = ptr[pos];
         unsigned char ch_len = escape_table[ch];
         /* JSON encoding */
 
-        if (RB_UNLIKELY(ch_len)) {
-            switch (ch_len) {
-                case 9: {
-                    FLUSH_POS(1);
-                    switch (ch) {
-                        case '"':  fbuffer_append(out_buffer, "\\\"", 2); break;
-                        case '\\': fbuffer_append(out_buffer, "\\\\", 2); break;
-                        case '/':  fbuffer_append(out_buffer, "\\/", 2); break;
-                        case '\b': fbuffer_append(out_buffer, "\\b", 2); break;
-                        case '\f': fbuffer_append(out_buffer, "\\f", 2); break;
-                        case '\n': fbuffer_append(out_buffer, "\\n", 2); break;
-                        case '\r': fbuffer_append(out_buffer, "\\r", 2); break;
-                        case '\t': fbuffer_append(out_buffer, "\\t", 2); break;
-                        default: {
-                            scratch[2] = '0';
-                            scratch[3] = '0';
-                            scratch[4] = hexdig[(ch >> 4) & 0xf];
-                            scratch[5] = hexdig[ch & 0xf];
-                            fbuffer_append(out_buffer, scratch, 6);
-                            break;
-                        }
-                    }
-                    break;
-                }
-                case 11: {
-                    unsigned char b2 = ptr[pos + 1];
-                    if (RB_UNLIKELY(b2 == 0x80)) {
-                        unsigned char b3 = ptr[pos + 2];
-                        if (b3 == 0xA8) {
-                            FLUSH_POS(3);
-                            fbuffer_append(out_buffer, "\\u2028", 6);
-                            break;
-                        } else if (b3 == 0xA9) {
-                            FLUSH_POS(3);
-                            fbuffer_append(out_buffer, "\\u2029", 6);
-                            break;
-                        }
-                    }
-                    ch_len = 3;
-                    // fallthrough
-                }
-                default:
-                    pos += ch_len;
-                    break;
-            }
-        } else {
-            pos++;
-        }
+        PROCESS_BYTE;
     }
 #undef FLUSH_POS
 
