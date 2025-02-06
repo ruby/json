@@ -14,6 +14,7 @@ import org.jruby.RubyHash;
 import org.jruby.RubyInteger;
 import org.jruby.RubyNumeric;
 import org.jruby.RubyObject;
+import org.jruby.RubyProc;
 import org.jruby.RubyString;
 import org.jruby.anno.JRubyMethod;
 import org.jruby.runtime.Block;
@@ -22,6 +23,7 @@ import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.Visibility;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
+import org.jruby.util.TypeConverter;
 
 /**
  * The <code>JSON::Ext::Generator::State</code> class.
@@ -57,6 +59,8 @@ public class GeneratorState extends RubyObject {
      * It is assumed to be a newline, if set.
      */
     private ByteList arrayNl = ByteList.EMPTY_BYTELIST;
+
+    private RubyProc asJSON;
 
     /**
      * The maximum level of nesting of structures allowed.
@@ -134,7 +138,7 @@ public class GeneratorState extends RubyObject {
 
     @JRubyMethod(meta=true)
     public static IRubyObject generate(ThreadContext context, IRubyObject klass, IRubyObject obj, IRubyObject opts, IRubyObject io) {
-        return fromState(context, opts)._generate(context, obj, io);
+        return fromState(context, opts).generate(context, obj, io);
     }
 
     static GeneratorState fromState(ThreadContext context, IRubyObject opts) {
@@ -211,6 +215,7 @@ public class GeneratorState extends RubyObject {
         this.spaceBefore = orig.spaceBefore;
         this.objectNl = orig.objectNl;
         this.arrayNl = orig.arrayNl;
+        this.asJSON = orig.asJSON;
         this.maxNesting = orig.maxNesting;
         this.allowNaN = orig.allowNaN;
         this.asciiOnly = orig.asciiOnly;
@@ -227,8 +232,8 @@ public class GeneratorState extends RubyObject {
      * the result. If no valid JSON document can be created this method raises
      * a GeneratorError exception.
      */
-    @JRubyMethod(visibility = Visibility.PRIVATE)
-    public IRubyObject _generate(ThreadContext context, IRubyObject obj, IRubyObject io) {
+    @JRubyMethod(alias="generate_new")
+    public IRubyObject generate(ThreadContext context, IRubyObject obj, IRubyObject io) {
         IRubyObject result = Generator.generateJson(context, obj, this, io);
         RuntimeInfo info = RuntimeInfo.forRuntime(context.runtime);
         if (!(result instanceof RubyString)) {
@@ -245,6 +250,11 @@ public class GeneratorState extends RubyObject {
         }
 
         return resultString;
+    }
+
+    @JRubyMethod(alias="generate_new")
+    public IRubyObject generate(ThreadContext context, IRubyObject obj) {
+        return generate(context, obj, context.nil);
     }
 
     @JRubyMethod(name="[]")
@@ -346,6 +356,22 @@ public class GeneratorState extends RubyObject {
                                     IRubyObject arrayNl) {
         this.arrayNl = prepareByteList(context, arrayNl);
         return arrayNl;
+    }
+
+    public RubyProc getAsJSON() {
+        return asJSON;
+    }
+
+    @JRubyMethod(name="as_json")
+    public IRubyObject as_json_get(ThreadContext context) {
+        return asJSON == null ? context.getRuntime().getFalse() : asJSON;
+    }
+
+    @JRubyMethod(name="as_json=")
+    public IRubyObject as_json_set(ThreadContext context,
+                                   IRubyObject asJSON) {
+        this.asJSON = (RubyProc)TypeConverter.convertToType(asJSON, context.getRuntime().getProc(), "to_proc");
+        return asJSON;
     }
 
     @JRubyMethod(name="check_circular?")
@@ -482,6 +508,8 @@ public class GeneratorState extends RubyObject {
         ByteList arrayNl = opts.getString("array_nl");
         if (arrayNl != null) this.arrayNl = arrayNl;
 
+        this.asJSON = opts.getProc("as_json");
+
         ByteList objectNl = opts.getString("object_nl");
         if (objectNl != null) this.objectNl = objectNl;
 
@@ -517,6 +545,7 @@ public class GeneratorState extends RubyObject {
         result.op_aset(context, runtime.newSymbol("space_before"), space_before_get(context));
         result.op_aset(context, runtime.newSymbol("object_nl"), object_nl_get(context));
         result.op_aset(context, runtime.newSymbol("array_nl"), array_nl_get(context));
+        result.op_aset(context, runtime.newSymbol("as_json"), as_json_get(context));
         result.op_aset(context, runtime.newSymbol("allow_nan"), allow_nan_p(context));
         result.op_aset(context, runtime.newSymbol("ascii_only"), ascii_only_p(context));
         result.op_aset(context, runtime.newSymbol("max_nesting"), max_nesting_get(context));

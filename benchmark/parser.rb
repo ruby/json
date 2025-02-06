@@ -4,6 +4,7 @@ begin
   require "oj"
 rescue LoadError
 end
+
 begin
   require "rapidjson"
 rescue LoadError
@@ -21,16 +22,21 @@ end
 
 def benchmark_parsing(name, json_output)
   puts "== Parsing #{name} (#{json_output.size} bytes)"
+  coder = JSON::Coder.new
 
   Benchmark.ips do |x|
     x.report("json")      { JSON.parse(json_output) } if RUN[:json]
+    x.report("json_coder") { coder.load(json_output) } if RUN[:json_coder]
+
     if defined?(Oj)
       x.report("oj")        { Oj.load(json_output) } if RUN[:oj]
       x.report("Oj::Parser") { Oj::Parser.new(:usual).parse(json_output) } if RUN[:oj]
     end
+
     if defined?(RapidJSON)
       x.report("rapidjson") { RapidJSON.parse(json_output) } if RUN[:rapidjson]
     end
+
     x.compare!(order: :baseline)
   end
   puts

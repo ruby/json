@@ -25,10 +25,10 @@ public class ParserService implements BasicLibraryService {
 
         info.jsonModule = new WeakReference<RubyModule>(runtime.defineModule("JSON"));
         RubyModule jsonExtModule = info.jsonModule.get().defineModuleUnder("Ext");
-        RubyClass parserClass =
-            jsonExtModule.defineClassUnder("Parser", runtime.getObject(),
-                                           Parser.ALLOCATOR);
-        parserClass.defineAnnotatedMethods(Parser.class);
+        RubyClass parserConfigClass =
+            jsonExtModule.defineClassUnder("ParserConfig", runtime.getObject(),
+                                           ParserConfig.ALLOCATOR);
+        parserConfigClass.defineAnnotatedMethods(ParserConfig.class);
         return true;
     }
 }

@@ -100,6 +100,8 @@ public final class Generator {
             case FLOAT  : return (Handler<T>) FLOAT_HANDLER;
             case FIXNUM : return (Handler<T>) FIXNUM_HANDLER;
             case BIGNUM : return (Handler<T>) BIGNUM_HANDLER;
+            case SYMBOL :
+                return (Handler<T>) SYMBOL_HANDLER;
             case STRING :
                 if (Helpers.metaclass(object) != runtime.getString()) break;
                 return (Handler<T>) STRING_HANDLER;
@@ -109,6 +111,11 @@ public final class Generator {
             case HASH   :
                 if (Helpers.metaclass(object) != runtime.getHash()) break;
                 return (Handler<T>) HASH_HANDLER;
+            case STRUCT :
+                RuntimeInfo info = RuntimeInfo.forRuntime(runtime);
+                RubyClass fragmentClass = info.jsonModule.get().getClass("Fragment");
+                if (Helpers.metaclass(object) != fragmentClass) break;
+                return FRAGMENT_HANDLER;
         }
         return GENERIC_HANDLER;
     }
@@ -121,6 +128,7 @@ public final class Generator {
             case FLOAT  : generateFloat(context, session, (RubyFloat) object, buffer); return;
             case FIXNUM : generateFixnum(session, (RubyFixnum) object, buffer); return;
             case BIGNUM : generateBignum((RubyBignum) object, buffer); return;
+            case SYMBOL : generateSymbol(context, session, (RubySymbol) object, buffer); return;
             case STRING :
                 if (Helpers.metaclass(object) != context.runtime.getString()) break;
                 generateString(context, session, (RubyString) object, buffer); return;
@@ -130,6 +138,11 @@ public final class Generator {
             case HASH   :
                 if (Helpers.metaclass(object) != context.runtime.getHash()) break;
                 generateHash(context, session, (RubyHash) object, buffer); return;
+            case STRUCT :
+                RuntimeInfo info = RuntimeInfo.forRuntime(context.runtime);
+                RubyClass fragmentClass = info.jsonModule.get().getClass("Fragment");
+                if (Helpers.metaclass(object) != fragmentClass) break;
+                generateFragment(context, session, object, buffer); return;
         }
         generateGeneric(context, session, object, buffer);
     }
@@ -266,6 +279,8 @@ public final class Generator {
     static final Handler<RubyBoolean> FALSE_HANDLER = new KeywordHandler<>(FALSE_STRING);
     private static final byte[] NULL_STRING = "null".getBytes();
     static final Handler<IRubyObject> NIL_HANDLER = new KeywordHandler<>(NULL_STRING);
+    static final Handler<IRubyObject> FRAGMENT_HANDLER = new FragmentHandler();
+    static final Handler<RubySymbol> SYMBOL_HANDLER = new SymbolHandler();
 
     /**
      * The default handler (<code>Object#to_json</code>): coerces the object
@@ -343,7 +358,17 @@ public final class Generator {
         double value = object.getValue();
 
         if (Double.isInfinite(value) || Double.isNaN(value)) {
-            if (!session.getState(context).allowNaN()) {
+            GeneratorState state = session.getState(context);
+
+            if (!state.allowNaN()) {
+                if (state.strict() && state.getAsJSON() != null) {
+                    IRubyObject castedValue = state.getAsJSON().call(context, object);
+                    if (castedValue != object) {
+                        getHandlerFor(context.runtime, castedValue).generate(context, session, castedValue, buffer);
+                        return;
+                    }
+                }
+                
                 throw Utils.buildGeneratorError(context, object, object + " not allowed in JSON").toThrowable();
             }
         }
@@ -526,6 +551,57 @@ public final class Generator {
         session.getStringEncoder(context).generate(context, object, buffer);
     }
 
+    private static class FragmentHandler extends Handler<IRubyObject> {
+        @Override
+        RubyString generateNew(ThreadContext context, Session session, IRubyObject object) {
+            return generateFragmentNew(context, session, object);
+        }
+
+        @Override
+        void generate(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
+            generateFragment(context, session, object, buffer);
+        }
+    }
+
+    static RubyString generateFragmentNew(ThreadContext context, Session session, IRubyObject object) {
+        GeneratorState state = session.getState(context);
+        IRubyObject result = object.callMethod(context, "to_json", state);
+        if (result instanceof RubyString) return (RubyString) result;
+        throw context.runtime.newTypeError("to_json must return a String");
+    }
+
+    static void generateFragment(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
+        RubyString result = generateFragmentNew(context, session, object);
+        ByteList bytes = result.getByteList();
+        buffer.write(bytes.unsafeBytes(), bytes.begin(), bytes.length());
+    }
+
+    private static class SymbolHandler extends Handler<RubySymbol> {
+        @Override
+        int guessSize(ThreadContext context, Session session, RubySymbol object) {
+            GeneratorState state = session.getState(context);
+            if (state.strict()) {
+                return STRING_HANDLER.guessSize(context, session, object.asString());
+            } else {
+                return GENERIC_HANDLER.guessSize(context, session, object);
+            }
+        }
+
+        @Override
+        void generate(ThreadContext context, Session session, RubySymbol object, OutputStream buffer) throws IOException {
+            generateSymbol(context, session, object, buffer);
+        }
+    }
+
+    static void generateSymbol(ThreadContext context, Session session, RubySymbol object, OutputStream buffer) throws IOException {
+        GeneratorState state = session.getState(context);
+        if (state.strict()) {
+            STRING_HANDLER.generate(context, session, object.asString(), buffer);
+        } else {
+            GENERIC_HANDLER.generate(context, session, object, buffer);
+        }
+    }
+
     private static class ObjectHandler extends Handler<IRubyObject> {
         @Override
         RubyString generateNew(ThreadContext context, Session session, IRubyObject object) {
@@ -562,10 +638,18 @@ public final class Generator {
     static RubyString generateGenericNew(ThreadContext context, Session session, IRubyObject object) {
         GeneratorState state = session.getState(context);
         if (state.strict()) {
+            if (state.getAsJSON() != null ) {
+                IRubyObject value = state.getAsJSON().call(context, object);
+                Handler handler = getHandlerFor(context.runtime, value);
+                if (handler == GENERIC_HANDLER) {
+                    throw Utils.buildGeneratorError(context, object, value + " returned by as_json not allowed in JSON").toThrowable();
+                }
+                return handler.generateNew(context, session, value);
+            }
             throw Utils.buildGeneratorError(context, object, object + " not allowed in JSON").toThrowable();
         } else if (object.respondsTo("to_json")) {
             IRubyObject result = object.callMethod(context, "to_json", state);
-            if (result instanceof RubyString) return (RubyString) result;
+            if (result instanceof RubyString) return (RubyString)result;
             throw context.runtime.newTypeError("to_json must return a String");
         } else {
             return OBJECT_HANDLER.generateNew(context, session, object);

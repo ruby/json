@@ -29,7 +29,7 @@ If bundler is not being used to manage dependencies, install the gem by executin
 
     $ gem install json
 
-## Usage
+## Basic Usage
 
 To use JSON you can
 
@@ -52,7 +52,80 @@ You can also use the `pretty_generate` method (which formats the output more
 verbosely and nicely) or `fast_generate` (which doesn't do any of the security
 checks generate performs, e. g. nesting deepness checks).
 
-## Handling arbitrary types
+## Casting non native types
+
+JSON documents can only support Hashes, Arrays, Strings, Integers and Floats.
+
+By default if you attempt to serialize something else, `JSON.generate` will
+search for a `#to_json` method on that object:
+
+```ruby
+Position = Struct.new(:latitude, :longitude) do
+  def to_json(state = nil, *)
+    JSON::State.from_state(state).generate({
+      latitude: latitude,
+      longitude: longitude,
+    })
+  end
+end
+
+JSON.generate([
+  Position.new(12323.234, 435345.233),
+  Position.new(23434.676, 159435.324),
+]) # => [{"latitude":12323.234,"longitude":435345.233},{"latitude":23434.676,"longitude":159435.324}]
+```
+
+If a `#to_json` method isn't defined on the object, `JSON.generate` will fallback to call `#to_s`:
+
+```ruby
+JSON.generate(Object.new) # => "#<Object:0x000000011e768b98>"
+```
+
+Both of these behavior can be disabled using the `strict: true` option:
+
+```ruby
+JSON.generate(Object.new, strict: true) # => Object not allowed in JSON (JSON::GeneratorError)
+JSON.generate(Position.new(1, 2)) # => Position not allowed in JSON (JSON::GeneratorError)
+```
+
+## JSON::Coder
+
+Since `#to_json` methods are global, it can sometimes be problematic if you need a given type to be
+serialized in different ways in different locations.
+
+Instead it is recommended to use the newer `JSON::Coder` API:
+
+```ruby
+module MyApp
+  API_JSON_CODER = JSON::Coder.new do |object|
+    case object
+    when Time
+      object.iso8601(3)
+    else
+      object
+    end
+  end
+end
+
+puts MyApp::API_JSON_CODER.dump(Time.now.utc) # => "2025-01-21T08:41:44.286Z"
+```
+
+The provided block is called for all objects that don't have a native JSON equivalent, and
+must return a Ruby object that has a native JSON equivalent.
+
+## Combining JSON fragments
+
+To combine JSON fragments into a bigger JSON document, you can use `JSON::Fragment`:
+
+```ruby
+posts_json = cache.fetch_multi(post_ids) do |post_id|
+  JSON.generate(Post.find(post_id))
+end
+posts_json.map! { |post_json| JSON::Fragment.new(post_json) }
+JSON.generate({ posts: posts_json, count: posts_json.count })
+```
+
+## Round-tripping arbitrary types
 
 > [!CAUTION]
 > You should never use `JSON.unsafe_load` nor `JSON.parse(str, create_additions: true)` to parse untrusted user input,

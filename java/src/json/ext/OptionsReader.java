@@ -10,10 +10,12 @@ import org.jruby.Ruby;
 import org.jruby.RubyClass;
 import org.jruby.RubyHash;
 import org.jruby.RubyNumeric;
+import org.jruby.RubyProc;
 import org.jruby.RubyString;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
+import org.jruby.util.TypeConverter;
 
 final class OptionsReader {
     private final ThreadContext context;
@@ -109,5 +111,11 @@ final class OptionsReader {
         IRubyObject value = get(key);
         if (value == null || value.isNil()) return new RubyHash(runtime);
         return (RubyHash) value;
+    }
+
+    RubyProc getProc(String key) {
+        IRubyObject value = get(key);
+        if (value == null) return null;
+        return (RubyProc)TypeConverter.convertToType(value, runtime.getProc(), "to_proc");
     }
 }

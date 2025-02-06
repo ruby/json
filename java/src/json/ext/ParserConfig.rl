@@ -42,13 +42,12 @@ import static org.jruby.util.ConvertDouble.DoubleConverter;
  *
  * <p>This class does not perform the actual parsing, just acts as an interface
  * to Ruby code. When the {@link #parse(ThreadContext)} method is invoked, a
- * Parser.ParserSession object is instantiated, which handles the process.
+ * ParserConfig.ParserSession object is instantiated, which handles the process.
  *
  * @author mernen
  */
-public class Parser extends RubyObject {
+public class ParserConfig extends RubyObject {
     private final RuntimeInfo info;
-    private RubyString vSource;
     private RubyString createId;
     private boolean createAdditions;
     private boolean deprecatedCreateAdditions;
@@ -71,7 +70,7 @@ public class Parser extends RubyObject {
     private static final String CONST_INFINITY = "Infinity";
     private static final String CONST_MINUS_INFINITY = "MinusInfinity";
 
-    static final ObjectAllocator ALLOCATOR = Parser::new;
+    static final ObjectAllocator ALLOCATOR = ParserConfig::new;
 
     /**
      * Multiple-value return for internal parser methods.
@@ -97,13 +96,13 @@ public class Parser extends RubyObject {
         }
     }
 
-    public Parser(Ruby runtime, RubyClass metaClass) {
+    public ParserConfig(Ruby runtime, RubyClass metaClass) {
         super(runtime, metaClass);
         info = RuntimeInfo.forRuntime(runtime);
     }
 
     /**
-     * <code>Parser.new(source, opts = {})</code>
+     * <code>ParserConfig.new(source, opts = {})</code>
      *
      * <p>Creates a new <code>JSON::Ext::Parser</code> instance for the string
      * <code>source</code>.
@@ -154,42 +153,27 @@ public class Parser extends RubyObject {
 
     @JRubyMethod(name = "new", meta = true)
     public static IRubyObject newInstance(IRubyObject clazz, IRubyObject arg0, Block block) {
-        Parser parser = (Parser)((RubyClass)clazz).allocate();
+        ParserConfig config = (ParserConfig)((RubyClass)clazz).allocate();
 
-        parser.callInit(arg0, block);
+        config.callInit(arg0, block);
 
-        return parser;
+        return config;
     }
 
     @JRubyMethod(name = "new", meta = true)
     public static IRubyObject newInstance(IRubyObject clazz, IRubyObject arg0, IRubyObject arg1, Block block) {
-        Parser parser = (Parser)((RubyClass)clazz).allocate();
+        ParserConfig config = (ParserConfig)((RubyClass)clazz).allocate();
 
-        parser.callInit(arg0, arg1, block);
+        config.callInit(arg0, arg1, block);
 
-        return parser;
-    }
-
-    @JRubyMethod(meta=true)
-    public static IRubyObject parse(ThreadContext context, IRubyObject clazz, IRubyObject source, IRubyObject opts) {
-        Parser parser = (Parser)((RubyClass)clazz).allocate();
-        parser.callInit(source, opts, null);
-        return parser.parse(context);
+        return config;
     }
 
     @JRubyMethod(visibility = Visibility.PRIVATE)
-    public IRubyObject initialize(ThreadContext context, IRubyObject arg0) {
-        return initialize(context, arg0, null);
-    }
-
-    @JRubyMethod(visibility = Visibility.PRIVATE)
-    public IRubyObject initialize(ThreadContext context, IRubyObject arg0, IRubyObject arg1) {
+    public IRubyObject initialize(ThreadContext context, IRubyObject options) {
         Ruby runtime = context.runtime;
-        if (this.vSource != null) {
-            throw runtime.newTypeError("already initialized instance");
-        }
 
-        OptionsReader opts   = new OptionsReader(context, arg1);
+        OptionsReader opts   = new OptionsReader(context, options);
         this.maxNesting      = opts.getInt("max_nesting", DEFAULT_MAX_NESTING);
         this.allowNaN        = opts.getBool("allow_nan", false);
         this.allowTrailingComma = opts.getBool("allow_trailing_comma", false);
@@ -226,8 +210,6 @@ public class Parser extends RubyObject {
         if(symbolizeNames && createAdditions) {
           throw runtime.newArgumentError("options :symbolize_names and :create_additions cannot be used in conjunction");
         }
-        this.vSource = arg0.convertToString();
-        this.vSource = convertEncoding(context, vSource);
 
         return this;
     }
@@ -256,27 +238,8 @@ public class Parser extends RubyObject {
      * complete data structure as a result.
      */
     @JRubyMethod
-    public IRubyObject parse(ThreadContext context) {
-        return new ParserSession(this, context, info).parse(context);
-    }
-
-    /**
-     * <code>Parser#source()</code>
-     *
-     * <p>Returns a copy of the current <code>source</code> string, that was
-     * used to construct this Parser.
-     */
-    @JRubyMethod(name = "source")
-    public IRubyObject source_get(ThreadContext context) {
-        return checkAndGetSource(context).dup();
-    }
-
-    public RubyString checkAndGetSource(ThreadContext context) {
-      if (vSource != null) {
-        return vSource;
-      } else {
-        throw context.runtime.newTypeError("uninitialized instance");
-      }
+    public IRubyObject parse(ThreadContext context, IRubyObject source) {
+        return new ParserSession(this, convertEncoding(context, source.convertToString()), context, info).parse(context);
     }
 
     /**
@@ -313,7 +276,7 @@ public class Parser extends RubyObject {
     // Ragel uses lots of fall-through
     @SuppressWarnings("fallthrough")
     private static class ParserSession {
-        private final Parser parser;
+        private final ParserConfig config;
         private final RuntimeInfo info;
         private final ByteList byteList;
         private final ByteList view;
@@ -321,10 +284,10 @@ public class Parser extends RubyObject {
         private final StringDecoder decoder;
         private int currentNesting = 0;
 
-        private ParserSession(Parser parser, ThreadContext context, RuntimeInfo info) {
-            this.parser = parser;
+        private ParserSession(ParserConfig config, RubyString source, ThreadContext context, RuntimeInfo info) {
+            this.config = config;
             this.info = info;
-            this.byteList = parser.checkAndGetSource(context).getByteList();
+            this.byteList = source.getByteList();
             this.data = byteList.unsafeBytes();
             this.view = new ByteList(data, false);
             this.decoder = new StringDecoder();
@@ -381,14 +344,14 @@ public class Parser extends RubyObject {
                 result = context.tru;
             }
             action parse_nan {
-                if (parser.allowNaN) {
+                if (config.allowNaN) {
                     result = getConstant(CONST_NAN);
                 } else {
                     throw unexpectedToken(context, p - 2, pe);
                 }
             }
             action parse_infinity {
-                if (parser.allowNaN) {
+                if (config.allowNaN) {
                     result = getConstant(CONST_INFINITY);
                 } else {
                     throw unexpectedToken(context, p - 7, pe);
@@ -398,7 +361,7 @@ public class Parser extends RubyObject {
                 if (pe > fpc + 8 &&
                     absSubSequence(fpc, fpc + 9).equals(JSON_MINUS_INFINITY)) {
 
-                    if (parser.allowNaN) {
+                    if (config.allowNaN) {
                         result = getConstant(CONST_MINUS_INFINITY);
                         fexec p + 10;
                         fhold;
@@ -479,7 +442,7 @@ public class Parser extends RubyObject {
             %% write exec;
 
             if (cs >= JSON_value_first_final && result != null) {
-                if (parser.freeze) {
+                if (config.freeze) {
                   result.setFrozen(true);
                 }
                 res.update(result, p);
@@ -559,7 +522,7 @@ public class Parser extends RubyObject {
                 return;
             }
             final ByteList num = absSubSequence(p, new_p);
-            IRubyObject number = parser.decimalFactory.apply(context, num);
+            IRubyObject number = config.decimalFactory.apply(context, num);
 
             res.update(number, new_p + 1);
         }
@@ -619,8 +582,8 @@ public class Parser extends RubyObject {
             int memo = p;
             %% write exec;
 
-            if (parser.createAdditions) {
-                RubyHash matchString = parser.match_string;
+            if (config.createAdditions) {
+                RubyHash matchString = config.match_string;
                 if (matchString != null) {
                     final IRubyObject[] memoArray = { result, null };
                     try {
@@ -630,7 +593,7 @@ public class Parser extends RubyObject {
                         RubyClass klass = (RubyClass) memoArray[1];
                         if (klass.respondsTo("json_creatable?") &&
                             klass.callMethod(context, "json_creatable?").isTrue()) {
-                            if (parser.deprecatedCreateAdditions) {
+                            if (config.deprecatedCreateAdditions) {
                                 context.runtime.getWarnings().warn("JSON.load implicit support for `create_additions: true` is deprecated and will be removed in 3.0, use JSON.unsafe_load or explicitly pass `create_additions: true`");
                             }
                             result = klass.callMethod(context, "json_create", result);
@@ -644,7 +607,7 @@ public class Parser extends RubyObject {
                   RubyString string = (RubyString)result;
                   string.setEncoding(UTF8Encoding.INSTANCE);
                   string.clearCodeRange();
-                  if (parser.freeze) {
+                  if (config.freeze) {
                      string.setFrozen(true);
                      string = context.runtime.freezeAndDedupString(string);
                   }
@@ -663,7 +626,7 @@ public class Parser extends RubyObject {
 
             write data;
 
-            action allow_trailing_comma { parser.allowTrailingComma }
+            action allow_trailing_comma { config.allowTrailingComma }
 
             action parse_value {
                 parseValue(context, res, fpc, pe);
@@ -671,7 +634,7 @@ public class Parser extends RubyObject {
                     fhold;
                     fbreak;
                 } else {
-                    if (parser.arrayClass == context.runtime.getArray()) {
+                    if (config.arrayClass == context.runtime.getArray()) {
                         ((RubyArray)result).append(res.result);
                     } else {
                         result.callMethod(context, "<<", res.result);
@@ -701,16 +664,16 @@ public class Parser extends RubyObject {
         void parseArray(ThreadContext context, ParserResult res, int p, int pe) {
             int cs;
 
-            if (parser.maxNesting > 0 && currentNesting > parser.maxNesting) {
+            if (config.maxNesting > 0 && currentNesting > config.maxNesting) {
                 throw newException(context, Utils.M_NESTING_ERROR,
                     "nesting of " + currentNesting + " is too deep");
             }
 
             IRubyObject result;
-            if (parser.arrayClass == context.runtime.getArray()) {
+            if (config.arrayClass == context.runtime.getArray()) {
                 result = RubyArray.newArray(context.runtime);
             } else {
-                result = parser.arrayClass.newInstance(context,
+                result = config.arrayClass.newInstance(context,
                         IRubyObject.NULL_ARRAY, Block.NULL_BLOCK);
             }
 
@@ -730,7 +693,7 @@ public class Parser extends RubyObject {
 
             write data;
 
-            action allow_trailing_comma { parser.allowTrailingComma }
+            action allow_trailing_comma { config.allowTrailingComma }
 
             action parse_value {
                 parseValue(context, res, fpc, pe);
@@ -738,7 +701,7 @@ public class Parser extends RubyObject {
                     fhold;
                     fbreak;
                 } else {
-                    if (parser.objectClass == context.runtime.getHash()) {
+                    if (config.objectClass == context.runtime.getHash()) {
                         ((RubyHash)result).op_aset(context, lastName, res.result);
                     } else {
                         Helpers.invoke(context, result, "[]=", lastName, res.result);
@@ -754,7 +717,7 @@ public class Parser extends RubyObject {
                     fbreak;
                 } else {
                     RubyString name = (RubyString)res.result;
-                    if (parser.symbolizeNames) {
+                    if (config.symbolizeNames) {
                         lastName = name.intern();
                     } else {
                         lastName = name;
@@ -784,7 +747,7 @@ public class Parser extends RubyObject {
             IRubyObject lastName = null;
             boolean objectDefault = true;
 
-            if (parser.maxNesting > 0 && currentNesting > parser.maxNesting) {
+            if (config.maxNesting > 0 && currentNesting > config.maxNesting) {
                 throw newException(context, Utils.M_NESTING_ERROR,
                     "nesting of " + currentNesting + " is too deep");
             }
@@ -792,11 +755,11 @@ public class Parser extends RubyObject {
             // this is guaranteed to be a RubyHash due to the earlier
             // allocator test at OptionsReader#getClass
             IRubyObject result;
-            if (parser.objectClass == context.runtime.getHash()) {
+            if (config.objectClass == context.runtime.getHash()) {
                 result = RubyHash.newHash(context.runtime);
             } else {
                 objectDefault = false;
-                result = parser.objectClass.newInstance(context,
+                result = config.objectClass.newInstance(context,
                         IRubyObject.NULL_ARRAY, Block.NULL_BLOCK);
             }
 
@@ -811,21 +774,21 @@ public class Parser extends RubyObject {
             IRubyObject returnedResult = result;
 
             // attempt to de-serialize object
-            if (parser.createAdditions) {
+            if (config.createAdditions) {
                 IRubyObject vKlassName;
                 if (objectDefault) {
-                    vKlassName = ((RubyHash)result).op_aref(context, parser.createId);
+                    vKlassName = ((RubyHash)result).op_aref(context, config.createId);
                 } else {
-                    vKlassName = result.callMethod(context, "[]", parser.createId);
+                    vKlassName = result.callMethod(context, "[]", config.createId);
                 }
 
                 if (!vKlassName.isNil()) {
                     // might throw ArgumentError, we let it propagate
-                    IRubyObject klass = parser.info.jsonModule.get().
+                    IRubyObject klass = config.info.jsonModule.get().
                             callMethod(context, "deep_const_get", vKlassName);
                     if (klass.respondsTo("json_creatable?") &&
                         klass.callMethod(context, "json_creatable?").isTrue()) {
-                        if (parser.deprecatedCreateAdditions) {
+                        if (config.deprecatedCreateAdditions) {
                             context.runtime.getWarnings().warn("JSON.load implicit support for `create_additions: true` is deprecated and will be removed in 3.0, use JSON.unsafe_load or explicitly pass `create_additions: true`");
                         }
 
@@ -896,7 +859,7 @@ public class Parser extends RubyObject {
          * @param name The constant name
          */
         private IRubyObject getConstant(String name) {
-            return parser.info.jsonModule.get().getConstant(name);
+            return config.info.jsonModule.get().getConstant(name);
         }
 
         private RaiseException newException(ThreadContext context, String className, String message) {
