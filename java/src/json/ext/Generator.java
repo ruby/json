@@ -5,6 +5,7 @@
  */
 package json.ext;
 
+import org.jcodings.Encoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
@@ -15,6 +16,7 @@ import org.jruby.RubyClass;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
 import org.jruby.RubyHash;
+import org.jruby.RubyIO;
 import org.jruby.RubyString;
 import org.jruby.RubySymbol;
 import org.jruby.runtime.Helpers;
@@ -81,9 +83,39 @@ public final class Generator {
             return handler.generateNew(context, session, object);
         }
 
-        BufferedOutputStream buffer = new BufferedOutputStream(new IOOutputStream(io), IO_BUFFER_SIZE);
+        BufferedOutputStream buffer =
+                new BufferedOutputStream(
+                        new PatchedIOOutputStream(io, UTF8Encoding.INSTANCE),
+                        IO_BUFFER_SIZE);
         handler.generateToBuffer(context, session, object, buffer);
         return io;
+    }
+
+    /**
+     * A version of IOOutputStream hacked to avoid fast-path RubyIO calls when the target IO has an external encoding.
+     *
+     * All calls to the underlying IO will be done dynamically and all incoming bytes wrapped in RubyString instances.
+     * This avoids bugs in the fast-path logic in JRuby 9.4.12.0 and earlier that fails to properly handle writing bytes
+     * when the source and target destination are the same.
+     *
+     * See https://github.com/jruby/jruby/issues/8682
+     */
+    private static class PatchedIOOutputStream extends IOOutputStream {
+        public PatchedIOOutputStream(IRubyObject io, Encoding encoding) {
+            super(io, encoding);
+        }
+
+        @Override
+        public RubyIO getRealIO(IRubyObject io) {
+            RubyIO realIO = super.getRealIO(io);
+
+            // if the real IO has an external encoding, don't use fast path
+            if (realIO == null || realIO.getEnc() != null) {
+                return null;
+            }
+
+            return realIO;
+        }
     }
 
     /**
