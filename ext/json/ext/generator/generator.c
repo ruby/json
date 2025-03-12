@@ -22,6 +22,7 @@ typedef struct JSON_Generator_StateStruct {
     bool ascii_only;
     bool script_safe;
     bool strict;
+    bool escape_html_entities;
 } JSON_Generator_State;
 
 #ifndef RB_UNLIKELY
@@ -32,7 +33,7 @@ static VALUE mJSON, cState, cFragment, mString_Extend, eGeneratorError, eNesting
 
 static ID i_to_s, i_to_json, i_new, i_pack, i_unpack, i_create_id, i_extend, i_encode;
 static VALUE sym_indent, sym_space, sym_space_before, sym_object_nl, sym_array_nl, sym_max_nesting, sym_allow_nan,
-             sym_ascii_only, sym_depth, sym_buffer_initial_length, sym_script_safe, sym_escape_slash, sym_strict, sym_as_json;
+             sym_ascii_only, sym_depth, sym_buffer_initial_length, sym_script_safe, sym_escape_slash, sym_strict, sym_as_json, sym_escape_html_entities;
 
 
 #define GET_STATE_TO(self, state) \
@@ -251,11 +252,11 @@ static const unsigned char script_safe_escape_table[256] = {
      4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 9, 9,
 };
 
-static inline unsigned char search_script_safe_escape(search_state *search)
+static inline unsigned char search_with_escape_table(search_state *search, unsigned char *table)
 {
     while (search->ptr < search->end) {
         unsigned char ch = (unsigned char)*search->ptr;
-        unsigned char ch_len = script_safe_escape_table[ch];
+        unsigned char ch_len = table[ch];
 
         if (RB_UNLIKELY(ch_len)) {
             if (ch_len & ESCAPE_MASK) {
@@ -279,13 +280,38 @@ static inline unsigned char search_script_safe_escape(search_state *search)
     return 0;
 }
 
-static void convert_UTF8_to_script_safe_JSON(search_state *search)
+static inline void convert_UTF8_to_JSON_with_table(search_state *search, const unsigned char table[256])
 {
     unsigned char ch_len;
-    while ((ch_len = search_script_safe_escape(search))) {
+    while ((ch_len = search_with_escape_table(search, (unsigned char *)table))) {
         escape_UTF8_char(search, ch_len);
     }
 }
+
+static const unsigned char escape_html_entities_escape_table[256] = {
+    // ASCII Control Characters
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+   // ASCII Characters
+    0, 0, 9, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 9, // '"', '&', and '/'
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 9, 0, // < and >
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, // '\\'
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+   // Continuation byte
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   // First byte of a 2-byte code point
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+   // First byte of a 3-byte code point
+    3, 3,11, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // 0xE2 is the start of \u2028 and \u2029
+   //First byte of a 4+ byte code point
+    4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 9, 9,
+};
 
 static const unsigned char ascii_only_escape_table[256] = {
     // ASCII Control Characters
@@ -977,9 +1003,11 @@ static void generate_json_string(FBuffer *buffer, struct generate_json_data *dat
         case ENC_CODERANGE_7BIT:
         case ENC_CODERANGE_VALID:
             if (RB_UNLIKELY(state->ascii_only)) {
-                convert_UTF8_to_ASCII_only_JSON(&search, state->script_safe ? script_safe_escape_table : ascii_only_escape_table);
+                convert_UTF8_to_ASCII_only_JSON(&search, state->escape_html_entities ? escape_html_entities_escape_table : (state->script_safe ? script_safe_escape_table : ascii_only_escape_table));
+            } else if (RB_UNLIKELY(state->escape_html_entities)) {
+                convert_UTF8_to_JSON_with_table(&search, escape_html_entities_escape_table);
             } else if (RB_UNLIKELY(state->script_safe)) {
-                convert_UTF8_to_script_safe_JSON(&search);
+                convert_UTF8_to_JSON_with_table(&search, script_safe_escape_table);
             } else {
                 convert_UTF8_to_JSON(&search);
             }
@@ -1609,6 +1637,19 @@ static VALUE cState_buffer_initial_length_set(VALUE self, VALUE buffer_initial_l
     return Qnil;
 }
 
+static VALUE cState_escape_html_entities(VALUE self)
+{
+    GET_STATE(self);
+    return state->escape_html_entities ? Qtrue : Qfalse;
+}
+
+static VALUE cState_escape_html_entities_set(VALUE self, VALUE val)
+{
+    GET_STATE(self);
+    state->escape_html_entities = RTEST(val);
+    return val;
+}
+
 static int configure_state_i(VALUE key, VALUE val, VALUE _arg)
 {
     JSON_Generator_State *state = (JSON_Generator_State *)_arg;
@@ -1627,6 +1668,8 @@ static int configure_state_i(VALUE key, VALUE val, VALUE _arg)
     else if (key == sym_escape_slash)          { state->script_safe = RTEST(val); }
     else if (key == sym_strict)                { state->strict = RTEST(val); }
     else if (key == sym_as_json)               { state->as_json = RTEST(val) ? rb_convert_type(val, T_DATA, "Proc", "to_proc") : Qfalse; }
+    else if (key == sym_escape_html_entities)  { state->escape_html_entities = RTEST(val); }
+
     return ST_CONTINUE;
 }
 
@@ -1740,6 +1783,9 @@ void Init_generator(void)
     rb_define_method(cState, "depth=", cState_depth_set, 1);
     rb_define_method(cState, "buffer_initial_length", cState_buffer_initial_length, 0);
     rb_define_method(cState, "buffer_initial_length=", cState_buffer_initial_length_set, 1);
+    rb_define_method(cState, "escape_html_entities", cState_escape_html_entities, 0);
+    rb_define_method(cState, "escape_html_entities?", cState_escape_html_entities, 0);
+    rb_define_method(cState, "escape_html_entities=", cState_escape_html_entities_set, 1);
     rb_define_method(cState, "generate", cState_generate, -1);
     rb_define_alias(cState, "generate_new", "generate"); // :nodoc:
 
@@ -1813,6 +1859,7 @@ void Init_generator(void)
     sym_escape_slash = ID2SYM(rb_intern("escape_slash"));
     sym_strict = ID2SYM(rb_intern("strict"));
     sym_as_json = ID2SYM(rb_intern("as_json"));
+    sym_escape_html_entities = ID2SYM(rb_intern("escape_html_entities"));
 
     usascii_encindex = rb_usascii_encindex();
     utf8_encindex = rb_utf8_encindex();

@@ -66,6 +66,7 @@ module JSON
             strict: strict?,
             depth: depth,
             buffer_initial_length: buffer_initial_length,
+            escape_html_entities: escape_html_entities?,
           }
 
           instance_variables.each do |iv|
