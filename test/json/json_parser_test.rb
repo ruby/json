@@ -673,6 +673,13 @@ class JSONParserTest < Test::Unit::TestCase
     end
   end
 
+  def test_parse_malformated_unicode_escapes
+    assert_equal "�|", JSON.parse('"\\u1gef|"')
+    assert_equal "�|", JSON.parse('"\\u12ge|"')
+    assert_equal "�|", JSON.parse('"\\u123g|"')
+    assert_equal '�\\\\"', JSON.parse('"\\u1\\\\\\\\\\\\\\\\"')
+  end
+
   private
 
   def string_deduplication_available?
