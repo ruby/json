@@ -215,6 +215,7 @@ class JSONGeneratorTest < Test::Unit::TestCase
       :object_nl             => "\n",
       :space                 => " ",
       :space_before          => "",
+      :escape_html_entities  => false,
     }.sort_by { |n,| n.to_s }, state.to_h.sort_by { |n,| n.to_s })
   end
 
@@ -234,6 +235,7 @@ class JSONGeneratorTest < Test::Unit::TestCase
       :object_nl             => "",
       :space                 => "",
       :space_before          => "",
+      :escape_html_entities  => false,
     }.sort_by { |n,| n.to_s }, state.to_h.sort_by { |n,| n.to_s })
   end
 
@@ -253,6 +255,7 @@ class JSONGeneratorTest < Test::Unit::TestCase
       :object_nl             => "",
       :space                 => "",
       :space_before          => "",
+      :escape_html_entities  => false,
     }.sort_by { |n,| n.to_s }, state.to_h.sort_by { |n,| n.to_s })
   end
 
@@ -479,6 +482,68 @@ class JSONGeneratorTest < Test::Unit::TestCase
     data = ["倩", "瀨"]
     json = '["倩","瀨"]'
     assert_equal json, generate(data, script_safe: true)
+  end
+
+  def test_escape_html_entities
+    data = [ '/' ]
+    json = '["\/"]'
+    assert_equal json, generate(data, :escape_html_entities => true)
+    #
+    data = [ "\u2028\u2029" ]
+    json = '["\u2028\u2029"]'
+    assert_equal json, generate(data, :escape_html_entities => true)
+    #
+    data = ['&']
+    json = '["\\u0026"]'
+    assert_equal json, generate(data, escape_html_entities: true)
+    #
+    data = ['<']
+    json = '["\\u003c"]'
+    assert_equal json, generate(data, escape_html_entities: true)
+    #
+    data = ['>']
+    json = '["\\u003e"]'
+    assert_equal json, generate(data, escape_html_entities: true)
+    #
+    data = ["倩", "瀨"]
+    json = '["倩","瀨"]'
+    assert_equal json, generate(data, escape_html_entities: true)
+  end
+
+  def test_escape_html_entities_priority_over_script_safe
+    data = ['&']
+    json = '["\\u0026"]'
+    assert_equal json, generate(data, escape_html_entities: true, script_safe: true)
+    #
+    data = ['<']
+    json = '["\\u003c"]'
+    assert_equal json, generate(data, escape_html_entities: true, script_safe: true)
+    #
+    data = ['>']
+    json = '["\\u003e"]'
+    assert_equal json, generate(data, escape_html_entities: true, script_safe: true)
+    #
+    data = ['/']
+    json = '["\/"]'
+    assert_equal json, generate(data, escape_html_entities: true, script_safe: true)
+    #
+    data = ['&<>/']
+    json = '["\\u0026\\u003c\\u003e\/"]'
+    assert_equal json, generate(data, escape_html_entities: true, script_safe: true)
+  end
+
+  def test_ascii_only_with_escape_html_entities
+    data = ['é&<>']
+    json = '["\\u00e9\\u0026\\u003c\\u003e"]'
+    assert_equal json, generate(data, ascii_only: true, escape_html_entities: true)
+    #
+    data = ['abc123']
+    json = '["abc123"]'
+    assert_equal json, generate(data, ascii_only: true, escape_html_entities: true)
+    #
+    data = ['倩瀨']
+    json = '["\\u5029\\u7028"]'
+    assert_equal json, generate(data, ascii_only: true, escape_html_entities: true)
   end
 
   def test_string_subclass
