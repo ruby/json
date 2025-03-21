@@ -3,7 +3,7 @@
 
 #include "ruby.h"
 #include "ruby/encoding.h"
-#include "../vendor/jeaiii/ltoa.h"
+#include "../vendor/jeaiii-ltoa.h"
 
 /* shims */
 /* This is the fallback definition from Ruby 3.4 */
