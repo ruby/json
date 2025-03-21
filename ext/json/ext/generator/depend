@@ -1,2 +1,3 @@
 generator.o: generator.c $(srcdir)/../fbuffer/fbuffer.h
 generator.o: generator.c $(srcdir)/../vendor/fpconv.c
+generator.o: generator.c $(srcdir)/../vendor/jeaiii-ltoa.h
