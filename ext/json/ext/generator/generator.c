@@ -5,6 +5,8 @@
 #include <math.h>
 #include <ctype.h>
 
+#include "simd.h"
+
 /* ruby api and some helpers */
 
 typedef struct JSON_Generator_StateStruct {
@@ -109,12 +111,21 @@ typedef struct _search_state {
     const char *end;
     const char *cursor;
     FBuffer *buffer;
+
+#ifdef ENABLE_SIMD
+    const char *returned_from;
+    unsigned char maybe_matches[16];
+    unsigned long current_match_index;
+    unsigned long maybe_match_length;
+#endif /* ENABLE_SIMD */ 
 } search_state;
 
 static inline void search_flush(search_state *search)
 {
-    fbuffer_append(search->buffer, search->cursor, search->ptr - search->cursor);
-    search->cursor = search->ptr;
+    if (search->cursor < search->ptr) {
+        fbuffer_append(search->buffer, search->cursor, search->ptr - search->cursor);
+        search->cursor = search->ptr;
+    }
 }
 
 static const unsigned char escape_table_basic[256] = {
@@ -129,6 +140,8 @@ static const unsigned char escape_table_basic[256] = {
      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
+
+unsigned char (*search_escape_basic_impl)(search_state *);
 
 static inline unsigned char search_escape_basic(search_state *search)
 {
@@ -186,7 +199,7 @@ static inline void escape_UTF8_char_basic(search_state *search) {
  */
 static inline void convert_UTF8_to_JSON(search_state *search)
 {
-    while (search_escape_basic(search)) {
+    while (search_escape_basic_impl(search)) {
         escape_UTF8_char_basic(search);
     }
 }
@@ -226,6 +239,349 @@ static inline void escape_UTF8_char(search_state *search, unsigned char ch_len) 
     }
     search->cursor = (search->ptr += ch_len);
 }
+
+#ifdef ENABLE_SIMD
+
+#ifdef HAVE_SIMD_NEON
+struct _simd_state {
+
+    struct {
+        uint8x16x4_t escape_table_basic[2];
+    } neon;
+};
+
+static struct _simd_state simd_state;
+#endif /* HAVE_SIMD_NEON */
+#endif /* ENABLE_SIMD */
+
+#ifdef ENABLE_SIMD
+
+static inline unsigned char search_escape_basic_simd_next_match(search_state *search) {
+    for(; search->current_match_index < search->maybe_match_length && search->ptr < search->end; ) {
+        unsigned char ch_len = search->maybe_matches[search->current_match_index];
+
+        if (RB_UNLIKELY(ch_len)) {
+            search->returned_from = search->ptr;
+            search_flush(search);
+            return 1;
+        } else {
+            search->ptr++;
+            search->current_match_index++;
+        }
+    }
+    return 0;
+}
+
+#ifdef HAVE_SIMD_NEON
+
+static inline uint8x16_t neon_lut_update(uint8x16_t chunk) {
+    uint8x16_t tmp1   = vqtbl4q_u8(simd_state.neon.escape_table_basic[0], chunk);
+    uint8x16_t tmp2   = vqtbl4q_u8(simd_state.neon.escape_table_basic[1], veorq_u8(chunk, vdupq_n_u8(0x40)));
+
+    uint8x16_t result = vorrq_u8(tmp1, tmp2);
+    return result;
+} 
+
+
+static inline unsigned char search_escape_basic_neon_advance_lut(search_state *search) {
+    while (search->ptr+sizeof(uint8x16_t) < search->end) {
+        uint8x16_t chunk  = vld1q_u8((const unsigned char *)search->ptr);
+        uint8x16_t result = neon_lut_update(chunk);
+        
+        if (vmaxvq_u8(result) == 0) {
+            search->ptr += sizeof(uint8x16_t);
+            continue;
+        }
+
+        vst1q_u8(search->maybe_matches, result);
+
+        search->current_match_index = 0;
+        search->maybe_match_length  = sizeof(uint8x16_t);
+        return search_escape_basic_simd_next_match(search);
+    }
+
+    // There are fewer than 16 bytes left. 
+    unsigned long remaining = (search->end - search->ptr);
+    if (remaining >= 8) {
+        // Flush the buffer so everything up until the last 'remaining' characters are unflushed.
+        search_flush(search);
+
+        FBuffer *buf = search->buffer;
+        fbuffer_inc_capa(buf, sizeof(uint8x16_t));
+
+        char *s = (buf->ptr + buf->len);
+
+        memset(s, 'X', sizeof(uint8x16_t));
+
+        // Optimistically copy the remaining characters to the output FBuffer. If there are no characters
+        // to escape, then everything ends up in the correct spot. Otherwise it was convenient temporary storage.
+        memcpy(s, search->ptr, remaining);
+
+        uint8x16_t chunk = vld1q_u8((const unsigned char *) s);
+        uint8x16_t result = neon_lut_update(chunk);
+        if (vmaxvq_u8(result) == 0) {
+            // Nothing to escape, ensure search_flush doesn't do anything by setting 
+            // search->cursor to search->ptr.
+            buf->len += remaining;
+            search->ptr = search->end;
+            search->cursor = search->end;
+            return 0;
+        }
+    }
+
+    return 0;
+}
+
+static inline uint8x16_t neon_rules_update(uint8x16_t chunk) {
+    const uint8x16_t lower_bound = vdupq_n_u8(' '); 
+    const uint8x16_t backslash   = vdupq_n_u8('\\');
+    const uint8x16_t dblquote    = vdupq_n_u8('\"');
+
+    uint8x16_t too_low       = vcltq_u8(chunk, lower_bound);
+    uint8x16_t has_backslash = vceqq_u8(chunk, backslash);
+    uint8x16_t has_dblquote  = vceqq_u8(chunk, dblquote);
+    uint8x16_t needs_escape  = vorrq_u8(too_low, vorrq_u8(has_backslash, has_dblquote));
+
+    return needs_escape;
+}
+
+static unsigned char search_escape_basic_neon_advance_rules(search_state *search) {
+    /*
+    * The code below implements an SIMD-based algorithm to determine if N bytes at a time
+    * need to be escaped. 
+    * 
+    * Assume the ptr = "Te\sting!" (the double quotes are included in the string)
+    * 
+    * The explanination will be limited to the first 8 bytes of the string for simplicity. However
+    * the vector insructions may work on larger vectors.
+    * 
+    * First, we load three constants 'lower_bound', 'backslash' and 'dblquote" in vector registers.
+    * 
+    * lower_bound: [20 20 20 20 20 20 20 20] 
+    * backslash:   [5C 5C 5C 5C 5C 5C 5C 5C] 
+    * dblquote:    [22 22 22 22 22 22 22 22] 
+    * 
+    * Next we load the first chunk of the ptr: 
+    * [22 54 65 5C 73 74 69 6E] ("  T  e  \  s  t  i  n)
+    * 
+    * First we check if any byte in chunk is less than 32 (0x20). This returns the following vector
+    * as no bytes are less than 32 (0x20):
+    * [0 0 0 0 0 0 0 0]
+    * 
+    * Next, we check if any byte in chunk is equal to a backslash:
+    * [0 0 0 FF 0 0 0 0]
+    * 
+    * Finally we check if any byte in chunk is equal to a double quote:
+    * [FF 0 0 0 0 0 0 0] 
+    * 
+    * Now we have three vectors where each byte indicates if the corresponding byte in chunk
+    * needs to be escaped. We combine these vectors with a series of logical OR instructions.
+    * This is the needs_escape vector and it is equal to:
+    * [FF 0 0 FF 0 0 0 0] 
+    * 
+    * For ARM Neon specifically, we check if the maximum number in the vector is 0. The maximum of
+    * the needs_escape vector is FF. Therefore, we know there is at least one byte that needs to be
+    * escaped.
+    * 
+    * If the maximum of the needs_escape vector is 0, none of the bytes need to be escaped and
+    * we advance pos by the width of the vector.
+    * 
+    * To determine how to escape characters, we look at each value in the needs_escape vector and take
+    * the appropriate action.
+    */
+    while (search->ptr+sizeof(uint8x16_t) < search->end) {
+        uint8x16_t chunk         = vld1q_u8((const unsigned char *)search->ptr);
+        uint8x16_t needs_escape  = neon_rules_update(chunk);
+
+        if (vmaxvq_u8(needs_escape) == 0) {
+            search->ptr += sizeof(uint8x16_t);
+            continue;
+        }
+        
+        // It doesn't matter the value of each byte in 'maybe_matches' as long as a match is non-zero.
+        vst1q_u8(search->maybe_matches, needs_escape);
+
+        search->current_match_index = 0;
+        search->maybe_match_length  = sizeof(uint8x16_t);
+        return search_escape_basic_simd_next_match(search);
+    }
+    
+    // There are fewer than 16 bytes left. 
+    unsigned long remaining = (search->end - search->ptr);
+    if (remaining >= 8) {
+        // Flush the buffer so everything up until the last 'remaining' characters are unflushed.
+        search_flush(search);
+
+        FBuffer *buf = search->buffer;
+        fbuffer_inc_capa(buf, sizeof(uint8x16_t));
+
+        char *s = (buf->ptr + buf->len);
+
+        memset(s, 'X', sizeof(uint8x16_t));
+
+        // Optimistically copy the remaining characters to the output FBuffer. If there are no characters
+        // to escape, then everything ends up in the correct spot. Otherwise it was convenient temporary storage.
+        memcpy(s, search->ptr, remaining);
+
+        uint8x16_t chunk = vld1q_u8((const unsigned char *) s);
+        uint8x16_t result = neon_rules_update(chunk);
+        if (vmaxvq_u8(result) == 0) {
+            // Nothing to escape, ensure search_flush doesn't do anything by setting 
+            // search->cursor to search->ptr.
+            buf->len += remaining;
+            search->ptr = search->end;
+            search->cursor = search->end;
+            return 0;
+        }
+    }
+
+    return 0;
+}
+
+static inline unsigned char search_escape_basic_neon(search_state *search)
+{
+    if (RB_UNLIKELY(search->returned_from != NULL)) {
+        search->current_match_index += (search->ptr - search->returned_from);
+        search->returned_from = NULL;
+        if (RB_UNLIKELY(search_escape_basic_simd_next_match(search))) {
+            return 1;
+        }
+    }
+
+    // TODO Pick an implementation or make them configurable. Right now it looks like the "rules" based approach
+    // might be a bit faster.
+
+    // if (search_escape_basic_neon_advance_lut(search)) {
+    //     return 1;
+    // }
+
+    if (search_escape_basic_neon_advance_rules(search)) {
+        return 1;
+    }
+
+    if (search->ptr < search->end) {
+        return search_escape_basic(search);
+    }
+
+    search_flush(search);
+    return 0;
+}
+#endif /* HAVE_SIMD_NEON */
+
+#ifdef HAVE_SIMD_SSE2
+
+// #define _mm_cmpge_epu8(a, b) _mm_cmpeq_epi8(_mm_max_epu8(a, b), a)
+// #define _mm_cmple_epu8(a, b) _mm_cmpge_epu8(b, a)
+// #define _mm_cmpgt_epu8(a, b) _mm_xor_si128(_mm_cmple_epu8(a, b), _mm_set1_epi8(-1))
+// #define _mm_cmplt_epu8(a, b) _mm_cmpgt_epu8(b, a)
+
+#ifdef __GNUC__
+#pragma GCC push_options
+#pragma GCC target ("sse2")
+#endif /* __GNUC__ */
+
+#ifdef __clang__
+__attribute__((target("sse2")))
+#endif /* __clang__ */
+static inline __m128i sse2_update(__m128i chunk) {
+    const __m128i lower_bound = _mm_set1_epi8(' '); 
+    const __m128i backslash   = _mm_set1_epi8('\\');
+    const __m128i dblquote    = _mm_set1_epi8('\"');
+    const __m128i high_bit    = _mm_set1_epi8(0x80);
+
+    // __m128i too_low       = _mm_cmplt_epu8(chunk, lower_bound);
+    
+    // This is a signed comparison. We need special handling for bytes > 127.
+    __m128i too_low       = _mm_cmplt_epi8(chunk, lower_bound);
+
+    // Determine which bytes have the high bit set and remove them from 'too_low'.
+    __m128i high_bit_set  = _mm_cmpeq_epi8(_mm_and_si128(chunk, high_bit), high_bit);
+    too_low               = _mm_andnot_si128(high_bit_set, too_low);
+
+    __m128i has_backslash = _mm_cmpeq_epi8(chunk, backslash);
+    __m128i has_dblquote  = _mm_cmpeq_epi8(chunk, dblquote);
+    __m128i needs_escape  = _mm_or_si128(too_low, _mm_or_si128(has_backslash, has_dblquote));
+    return needs_escape;
+}
+
+#ifdef __clang__
+__attribute__((target("sse2")))
+#endif /* __clang__ */
+static unsigned char search_escape_basic_sse2(search_state *search) {
+    if (RB_UNLIKELY(search->returned_from != NULL)) {
+        search->current_match_index += (search->ptr - search->returned_from);
+        search->returned_from = NULL;
+        if (RB_UNLIKELY(search_escape_basic_simd_next_match(search))) {
+            return 1;
+        }
+    }
+
+    while (search->ptr+sizeof(__m128i) < search->end) {
+        __m128i chunk         = _mm_loadu_si128((__m128i const*)search->ptr);
+        __m128i needs_escape  = sse2_update(chunk);
+
+        int needs_escape_mask = _mm_movemask_epi8(needs_escape);
+
+        if (needs_escape_mask == 0) {
+            search->ptr += sizeof(__m128i);
+            continue;
+        }
+
+        // It doesn't matter the value of each byte in 'maybe_matches' as long as a match is non-zero.
+        _mm_storeu_si128((__m128i *)search->maybe_matches, needs_escape);
+
+        search->current_match_index = 0;
+        search->maybe_match_length  = sizeof(__m128i);
+        return search_escape_basic_simd_next_match(search);
+    }
+
+    // There are fewer than 16 bytes left. 
+    unsigned long remaining = (search->end - search->ptr);
+    if (remaining >= 8) {
+        // Flush the buffer so everything up until the last 'remaining' characters are unflushed.
+        search_flush(search);
+
+        FBuffer *buf = search->buffer;
+        fbuffer_inc_capa(buf, sizeof(__m128i));
+
+        char *s = (buf->ptr + buf->len);
+
+        memset(s, 'X', sizeof(__m128i));
+
+        // Optimistically copy the remaining characters to the output FBuffer. If there are no characters
+        // to escape, then everything ends up in the correct spot. Otherwise it was convenient temporary storage.
+        memcpy(s, search->ptr, remaining);
+
+        __m128i chunk         = _mm_loadu_si128((__m128i const *) s);
+        __m128i needs_escape  = sse2_update(chunk);
+
+        int needs_escape_mask = _mm_movemask_epi8(needs_escape);
+
+        if (needs_escape_mask == 0) {
+            // Nothing to escape, ensure search_flush doesn't do anything by setting 
+            // search->cursor to search->ptr.
+            buf->len += remaining;
+            search->ptr = search->end;
+            search->cursor = search->end;
+            return 0;
+        }
+    }
+
+    if (search->ptr < search->end) {
+        return search_escape_basic(search);
+    }
+
+    search_flush(search);
+    return 0;
+}
+
+#ifdef __GNUC__
+#pragma GCC reset_options
+#endif /* __GNUC__ */
+
+#endif /* HAVE_SIMD_SSE2 */
+
+#endif /* ENABLE_SIMD */
 
 static const unsigned char script_safe_escape_table[256] = {
     // ASCII Control Characters
@@ -974,6 +1330,11 @@ static void generate_json_string(FBuffer *buffer, struct generate_json_data *dat
     search.cursor = search.ptr;
     search.end = search.ptr + len;
 
+#ifdef ENABLE_SIMD
+    search.current_match_index = 0;
+    search.returned_from = NULL;
+#endif /* ENABLE_SIMD */
+
     switch(rb_enc_str_coderange(obj)) {
         case ENC_CODERANGE_7BIT:
         case ENC_CODERANGE_VALID:
@@ -1180,6 +1541,18 @@ static VALUE generate_json_rescue(VALUE d, VALUE exc)
 
     return Qundef;
 }
+
+/* SIMD Utilities (if enabled) */
+#ifdef ENABLE_SIMD
+
+#ifdef HAVE_SIMD_NEON
+static void initialize_simd_neon(void) {
+    simd_state.neon.escape_table_basic[0] = load_uint8x16_4(escape_table_basic);
+    simd_state.neon.escape_table_basic[1] = load_uint8x16_4(escape_table_basic+64);
+}
+#endif /* HAVE_NEON_SIMD */
+
+#endif 
 
 static VALUE cState_partial_generate(VALUE self, VALUE obj, generator_func func, VALUE io)
 {
@@ -1837,4 +2210,25 @@ void Init_generator(void)
     binary_encindex = rb_ascii8bit_encindex();
 
     rb_require("json/ext/generator/state");
+
+
+    switch(find_simd_implementation()) {
+#ifdef ENABLE_SIMD
+#ifdef HAVE_SIMD_NEON
+        case SIMD_NEON:
+        /* Initialize ARM Neon SIMD Implementation. */
+            initialize_simd_neon();
+            search_escape_basic_impl = search_escape_basic_neon;
+            break;
+#endif /* HAVE_SIMD_NEON */
+#ifdef HAVE_SIMD_SSE2
+        case SIMD_SSE2:
+            search_escape_basic_impl = search_escape_basic_sse2;
+            break;
+#endif /* HAVE_SIMD_SSE2 */
+#endif /* ENABLE_SIMD */
+        default:
+            search_escape_basic_impl = search_escape_basic;
+            break;
+    }
 }
