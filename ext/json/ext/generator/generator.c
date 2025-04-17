@@ -415,6 +415,222 @@ static void convert_UTF8_to_ASCII_only_JSON(search_state *search, const unsigned
     }
 }
 
+/* Converts input string (in ptr and len) to a JSON string, (without the wrapping
+ * '"' characters) in FBuffer buffer. ASCII control characters (0x00-0x1F),
+ * dquote, and backslash are escaped, but no other characters.
+ *
+ * This implementation is not suited for ascii_only and script_safe mode.
+ */
+#include "./simd.h"
+
+#define SIMD_BATCH_SIZE sizeof(Vector8)
+
+#define SIMD_MINIMAL_SIZE 8
+
+static inline bool needs_json_escaping(const char* ptr) {
+    Vector8 chunk;
+
+    vector8_load(&chunk, (const uint8 *)ptr);
+
+    /* Break for ASCII control characters (0x00-0x1F), dquote, and backslash. */
+    return vector8_has(chunk, '"') || vector8_has(chunk, '\\') || vector8_has_le(chunk, 0x1F);
+}
+
+
+static const char universal_escape_table[256] = {
+    // ASCII Control Characters
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    // ASCII Characters
+    0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0, // '"'
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0, // '\\'
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    // Continuation byte
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    // First byte of a 2-byte code point
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    // First byte of a 4-byte code point
+    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+    //First byte of a 4+byte code point
+    4,4,4,4,4,4,4,4,5,5,5,5,6,6,1,1,
+};
+
+/* Converts in_string to a JSON string (without the wrapping '"'
+ * characters) in FBuffer out_buffer.
+ *
+ * The following characters are JSON-escaped: ASCII control
+ * characters (0x00-0x1F), dquote, and backslash.
+ *
+ * Everything else (should be UTF-8) is just passed through and
+ * appended to the result.
+ */
+static void convert_UTF8_to_JSON_wo_simd(FBuffer *out_buffer, const char *ptr, unsigned long len)
+{
+    const char *hexdig = "0123456789abcdef";
+    char scratch[12] = { '\\', 'u', 0, 0, 0, 0, '\\', 'u' };
+
+    unsigned long beg = 0, pos = 0;
+
+#define FLUSH_POS(bytes) if (pos > beg) { fbuffer_append(out_buffer, &ptr[beg], pos - beg); } pos += bytes; beg = pos;
+
+    while (pos < len) {
+        unsigned char ch = ptr[pos];
+        unsigned char ch_len = universal_escape_table[ch];
+        /* JSON encoding */
+
+        if (RB_UNLIKELY(ch_len)) {
+            switch (ch_len) {
+                case 1: {
+                    FLUSH_POS(1);
+                    switch (ch) {
+                        case '"':  fbuffer_append(out_buffer, "\\\"", 2); break;
+                        case '\\': fbuffer_append(out_buffer, "\\\\", 2); break;
+                        case '/':  fbuffer_append(out_buffer, "\\/", 2); break;
+                        case '\b': fbuffer_append(out_buffer, "\\b", 2); break;
+                        case '\f': fbuffer_append(out_buffer, "\\f", 2); break;
+                        case '\n': fbuffer_append(out_buffer, "\\n", 2); break;
+                        case '\r': fbuffer_append(out_buffer, "\\r", 2); break;
+                        case '\t': fbuffer_append(out_buffer, "\\t", 2); break;
+                        default: {
+                            scratch[2] = '0';
+                            scratch[3] = '0';
+                            scratch[4] = hexdig[(ch >> 4) & 0xf];
+                            scratch[5] = hexdig[ch & 0xf];
+                            fbuffer_append(out_buffer, scratch, 6);
+                            break;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    pos += ch_len;
+                    break;
+            }
+        } else {
+            pos++;
+        }
+    }
+#undef FLUSH_POS
+
+    if (beg < len) {
+        fbuffer_append(out_buffer, &ptr[beg], len - beg);
+    }
+}
+
+static inline void append_escaped_json_string_simd(FBuffer *buffer, const char *str, unsigned long len)
+{
+    if(len < SIMD_MINIMAL_SIZE) {
+        convert_UTF8_to_JSON_wo_simd(buffer, str, len);
+        return;
+    }
+
+    /* How many bytes can be processed using SIMD?  Round 'len' down
+     * to the previous multiple of sizeof(Vector8), assuming that's a
+     * power-of-2.
+     */
+    unsigned long vlen = len & (long) (~(SIMD_BATCH_SIZE - 1));
+
+    unsigned copypos = 0, i = 0;
+    while(i < vlen) {
+        /*
+         * To speed this up try searching sizeof(Vector8) bytes at once for
+         * special characters that we need to escape.  When we find one, we
+         * fall out of this first loop and copy the parts we've vector
+         * searched before processing the special-char vector byte-by-byte.
+         * Once we're done with that, come back and try doing vector searching
+         * again.  We'll also process the tail end of the string byte-by-byte.
+         */
+        for (; i < vlen; i += SIMD_BATCH_SIZE) {
+            if(needs_json_escaping(str + i)) {
+                break;
+            }
+        }
+
+        /*
+         * Write to the destination up to the point of that we've vector
+         * searched so far.
+         */
+        if (copypos < i) {
+            fbuffer_append(buffer, str + copypos, i - copypos);
+            copypos = i;
+        }
+
+        if(i < vlen) {
+            /* The current block needs escaping, so let's escape it. */
+            convert_UTF8_to_JSON_wo_simd(buffer, str + i, SIMD_BATCH_SIZE);
+            i += SIMD_BATCH_SIZE;
+            copypos = i;
+        }
+    }
+
+    /* Any characters that didn't fit into multiples of SIMD_BATCH_SIZE? If we
+    * have more than SIMD_MINIMAL_SIZE we check w/simd if we need escaping.
+    */
+    if(i == len) {
+        return;
+    }
+
+    const char* s = str + i;;
+    unsigned cnt = (unsigned)(len - i);
+
+    if(cnt >= SIMD_MINIMAL_SIZE) {
+        /* Convert using SIMD, even though we don't have SIMD_BATCH_SIZE chars.
+        *
+        * We cannot read SIMD_BATCH_SIZE bytes from the source, but we need
+        * that many. So we copy the remainiing input chars, and fill up with
+        * 'X' bytes that don't need escaping.
+        *
+        * If `needs_json_escaping` returns false, we already have the right
+        * bytes in the target. Otherwise we escape from the source `s` via
+        * `fbuffer_append_escaped_UTF8_string`.
+        */
+        fbuffer_inc_capa(buffer, SIMD_BATCH_SIZE);
+
+        memset(buffer->ptr + buffer->len, 'X', SIMD_BATCH_SIZE);
+        memcpy(buffer->ptr + buffer->len, s, cnt);
+
+        if(!needs_json_escaping(buffer->ptr + buffer->len)) {
+            buffer->len += cnt;
+            return;
+        }
+    }
+
+    convert_UTF8_to_JSON_wo_simd(buffer, s, cnt);
+}
+#undef SIMD_BATCH_SIZE
+
+
+
+
+/* Converts in_string to a JSON string (without the wrapping '"'
+ * characters) in FBuffer out_buffer.
+ *
+ * This function is only called with `ascii_only` and `script_safe` disabled.
+ * We escape ASCII control characters (0x00-0x1F), dquote, and backslash.
+ *
+ * Everything else (should be UTF-8) is just passed through and
+ * appended to the result.
+ */
+static inline void append_escaped_json_string(FBuffer *buffer, VALUE str) {
+    const char *ptr = RSTRING_PTR(str);
+    unsigned long len = RSTRING_LEN(str);
+
+    if(!len) {
+        return;
+    }
+
+    append_escaped_json_string_simd(buffer, ptr, len);
+
+    RB_GC_GUARD(str);
+}
+
 /*
  * Document-module: JSON::Ext::Generator
  *
@@ -967,22 +1183,44 @@ static void generate_json_string(FBuffer *buffer, struct generate_json_data *dat
 
     fbuffer_append_char(buffer, '"');
 
-    long len;
-    search_state search;
-    search.buffer = buffer;
-    RSTRING_GETMEM(obj, search.ptr, len);
-    search.cursor = search.ptr;
-    search.end = search.ptr + len;
-
     switch(rb_enc_str_coderange(obj)) {
         case ENC_CODERANGE_7BIT:
         case ENC_CODERANGE_VALID:
             if (RB_UNLIKELY(state->ascii_only)) {
+                long len;
+                search_state search;
+                search.buffer = buffer;
+                RSTRING_GETMEM(obj, search.ptr, len);
+                search.cursor = search.ptr;
+                search.end = search.ptr + len;
+
                 convert_UTF8_to_ASCII_only_JSON(&search, state->script_safe ? script_safe_escape_table : ascii_only_escape_table);
             } else if (RB_UNLIKELY(state->script_safe)) {
-                convert_UTF8_to_script_safe_JSON(&search);
+                {
+                    long len;
+                    search_state search;
+                    search.buffer = buffer;
+                    RSTRING_GETMEM(obj, search.ptr, len);
+                    search.cursor = search.ptr;
+                    search.end = search.ptr + len;
+
+                    convert_UTF8_to_script_safe_JSON(&search);
+                }
             } else {
-                convert_UTF8_to_JSON(&search);
+#if 0
+                {
+                    long len;
+                    search_state search;
+                    search.buffer = buffer;
+                    RSTRING_GETMEM(obj, search.ptr, len);
+                    search.cursor = search.ptr;
+                    search.end = search.ptr + len;
+
+                    convert_UTF8_to_JSON(&search);
+                }
+#else
+                append_escaped_json_string(buffer, obj);
+#endif
             }
             break;
         default:
