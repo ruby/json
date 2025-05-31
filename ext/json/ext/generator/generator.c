@@ -7,6 +7,95 @@
 
 #include "simd.h"
 
+#define TABLE_SIZE 4096  // fixed size
+#define MAX_ITERATIONS 3  // fixed size
+
+typedef enum EscapeStatus {
+    TABLE_FULL = -1, 
+    ESCAPE_SAFE = -2,
+    ESCAPE_UNSAFE = -3,
+    ESCAPE_UNKNOWN = -4
+} EscapeStatus;
+
+typedef struct Slot {
+    VALUE value;
+    EscapeStatus escapeStatus;
+} Slot;
+
+typedef struct {
+    Slot slots[TABLE_SIZE]; // Qnil = empty
+
+    unsigned int cnt, founds, fulls; 
+    uint64_t hits, misses;
+} value_table_t;
+
+inline unsigned hash_uint64(uint64_t x) {
+    x ^= x >> 32;
+    x ^= x >> 16;
+    return (uint16_t)(x * 0x9E3779B97F4A7C15ULL); // large prime
+}
+
+// Initialize the table (set all slots to Qnil)
+void init_table(value_table_t *table) {
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        table->slots[i].value = Qnil;
+        table->slots[i].escapeStatus = ESCAPE_UNKNOWN;
+    }
+    table->cnt = 0;
+    table->founds = 0;
+    table->fulls = 0;
+    table->hits = 0;
+    table->misses = 0;
+}
+
+inline void print_escape_status(value_table_t *table) {
+    printf("%8llu hits/%8llu misses (byte): %d %%; cache size, founds, fulls: %d, %d, %d -> %d %%\n",
+        table->hits, table->misses, (int)(100 * table->hits / (table->hits + table->misses)),
+        table->cnt, table->founds, table->fulls, (int)(100 * table->founds / (table->fulls + table->founds)));
+}
+    
+inline void set_escape_status(value_table_t *table, VALUE val, int idx, EscapeStatus escapeStatus) {
+    table->slots[idx].escapeStatus = escapeStatus;
+}
+
+// Add a VALUE to the table, returns the EscapeStatus
+inline int lookup_escape_status(value_table_t *table, VALUE val) {
+    unsigned h = hash_uint64(val);
+
+    int idx = h % TABLE_SIZE;
+    int cnt = MAX_ITERATIONS;
+    while(cnt--) {
+        if (table->slots[idx].value == Qnil) {
+            table->slots[idx].value = val;
+            table->cnt += 1;
+            return idx; // Successfully added
+        } else if (table->slots[idx].value == val) {
+            table->founds += 1;
+            return table->slots[idx].escapeStatus; // Already present
+        }
+        
+        idx = (idx+1) % TABLE_SIZE;
+    }
+    
+    table->fulls += 1;
+    return TABLE_FULL;
+}
+
+// Check if a VALUE exists in the table
+inline int contains_value(value_table_t *table, VALUE val) {
+    unsigned h = hash_uint64(val);
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        int idx = (h + i) % TABLE_SIZE;
+        if (table->slots[idx].value == Qnil) {
+            return 0; // Not found
+        }
+        if (table->slots[idx].value == val) {
+            return 1; // Found
+        }
+    }
+    return 0; // Not found
+}
+
 /* ruby api and some helpers */
 
 typedef struct JSON_Generator_StateStruct {
@@ -20,6 +109,7 @@ typedef struct JSON_Generator_StateStruct {
     long max_nesting;
     long depth;
     long buffer_initial_length;
+    value_table_t escape_status_cache;
 
     bool allow_nan;
     bool ascii_only;
@@ -1059,6 +1149,7 @@ static void state_init(JSON_Generator_State *state)
 {
     state->max_nesting = 100;
     state->buffer_initial_length = FBUFFER_INITIAL_LENGTH_DEFAULT;
+    init_table(&state->escape_status_cache);
 }
 
 static VALUE cState_s_allocate(VALUE klass)
@@ -1112,6 +1203,107 @@ convert_string_subclass(VALUE key)
     return key_to_s;
 }
 
+
+inline bool has_json_escapable_byte_in_keys_64(uint64_t x) {
+    // uint64_t is_ascii = 0x8080808080808080ULL & ~x;
+    // uint64_t lt35 = (x - 0x2323232323232323ULL);
+    // uint64_t sub92 = x ^ 0x5C5C5C5C5C5C5C5CULL;
+    // uint64_t eq92 = (sub92 - 0x0101010101010101ULL);
+    // return ((lt35 | eq92) & is_ascii) != 0;
+    
+    uint64_t is_ascii = 0x8080808080808080ULL & ~x;
+    uint64_t xor2 = x ^ 0x0202020202020202ULL;
+    uint64_t lt32_or_eq34 = xor2 - 0x2121212121212121ULL;
+    uint64_t sub92 = x ^ 0x5C5C5C5C5C5C5C5CULL;
+    uint64_t eq92 = (sub92 - 0x0101010101010101ULL);
+    return ((lt32_or_eq34 | eq92) & is_ascii) != 0;
+}
+
+inline bool has_json_escapable_byte_in_keys_32(uint32_t x) {
+    return has_json_escapable_byte_in_keys_64(x | 0x4444444400000000ULL);
+}
+inline bool has_json_escapable_byte_in_keys_16(uint16_t x) {
+    return has_json_escapable_byte_in_keys_64(x | 0x4444444444440000ULL);
+}
+inline bool has_json_escapable_byte_in_keys_8(uint8_t x) {
+    return has_json_escapable_byte_in_keys_64(x | 0x4444444444444400ULL);
+}
+
+static inline bool needsEscape(const char* ptr, unsigned len)
+{
+    const char* end = ptr + len;
+    while (ptr <= end - 8) {
+        if(has_json_escapable_byte_in_keys_64(*(uint64_t*)(ptr))) {
+            return true;
+        }
+        ptr += 8;
+    }
+    
+    if(ptr <= end - 4) {
+        if(has_json_escapable_byte_in_keys_32(*(uint32_t*)(ptr))) {
+            return true;
+        }
+        ptr += 4;
+    }
+    
+    if(ptr <= end - 2) {
+        if(has_json_escapable_byte_in_keys_16(*(uint16_t*)(ptr))) {
+            return true;
+        }
+        ptr += 2;
+    }
+    
+    if(ptr <= end - 1) {
+        if(has_json_escapable_byte_in_keys_8(*(uint8_t*)(ptr))) {
+            return true;
+        }
+        ptr += 1;
+    }
+    
+    return false;
+}
+
+static inline void generate_json_string_cached(JSON_Generator_State *state, FBuffer *buffer, struct generate_json_data *data, VALUE obj) {
+    const char* ptr; 
+    long len;
+    RSTRING_GETMEM(obj, ptr, len);
+
+    // if(len > 32 || len == 0) {
+    //     generate_json_string(buffer, data, obj); 
+    //     return;
+    // }
+
+    int escapeStatus = needsEscape(ptr, (int)len) ? ESCAPE_UNSAFE : ESCAPE_SAFE; // lookup_escape_status(&state->escape_status_cache, obj);
+    if(escapeStatus == ESCAPE_SAFE) {
+        fbuffer_inc_capa(buffer, len+2);
+        buffer->ptr[buffer->len] = '"';
+        MEMCPY(buffer->ptr + buffer->len + 1, ptr, char, len);
+        buffer->ptr[buffer->len + 1 + len] = '"';
+        fbuffer_consumed(buffer, len+2);
+    
+        // state->escape_status_cache.hits += len;
+    }
+    else if(escapeStatus == ESCAPE_UNSAFE || escapeStatus == TABLE_FULL) {
+printf("unsafe ");
+            rb_p(obj);
+        generate_json_string(buffer, data, obj); 
+        // state->escape_status_cache.misses += len;
+    }
+    else {
+        // escapeStatus is the index into the hash table
+        unsigned long expected_len_when_no_escape = FBUFFER_LEN(buffer) + len + 2;
+
+        generate_json_string(buffer, data, obj); 
+        set_escape_status(&state->escape_status_cache, obj, escapeStatus, 
+            FBUFFER_LEN(buffer) == expected_len_when_no_escape ? ESCAPE_SAFE : ESCAPE_UNSAFE);
+        state->escape_status_cache.misses += len;
+    }
+
+#if 0
+    print_escape_status(&state->escape_status_cache);
+#endif            
+}
+
 static int
 json_object_i(VALUE key, VALUE val, VALUE _arg)
 {
@@ -1152,7 +1344,7 @@ json_object_i(VALUE key, VALUE val, VALUE _arg)
     }
 
     if (RB_LIKELY(RBASIC_CLASS(key_to_s) == rb_cString)) {
-        generate_json_string(buffer, data, key_to_s);
+        generate_json_string_cached(state, buffer, data, key_to_s); 
     } else {
         generate_json(buffer, data, key_to_s);
     }
@@ -2018,6 +2210,7 @@ static VALUE cState_m_generate(VALUE klass, VALUE obj, VALUE opts, VALUE io)
     };
     rb_rescue(generate_json_try, (VALUE)&data, generate_json_rescue, (VALUE)&data);
 
+    // print_escape_status(&state.escape_status_cache);
     return fbuffer_finalize(&buffer);
 }
 
@@ -2167,7 +2360,6 @@ void Init_generator(void)
 
     rb_require("json/ext/generator/state");
 
-
     switch(find_simd_implementation()) {
 #ifdef HAVE_SIMD
 #ifdef HAVE_SIMD_NEON
@@ -2185,4 +2377,8 @@ void Init_generator(void)
             search_escape_basic_impl = search_escape_basic;
             break;
     }
+    
+#if 1
+    search_escape_basic_impl = search_escape_basic;
+#endif
 }
