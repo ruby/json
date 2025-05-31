@@ -162,8 +162,25 @@ static const unsigned char escape_table_basic[256] = {
 
 static unsigned char (*search_escape_basic_impl)(search_state *);
 
+inline bool has_json_escapable_byte(uint64_t x) {
+    uint64_t is_ascii = 0x8080808080808080ULL & ~x;
+    uint64_t xor2 = x ^ 0x0202020202020202ULL;
+    uint64_t lt32_or_eq34 = xor2 - 0x2121212121212121ULL;
+    uint64_t sub92 = x ^ 0x5C5C5C5C5C5C5C5CULL;
+    uint64_t eq92 = (sub92 - 0x0101010101010101ULL);
+    return ((lt32_or_eq34 | eq92) & is_ascii) != 0;
+}
+
 static inline unsigned char search_escape_basic(search_state *search)
 {
+    while (search->ptr <= search->end - 8) {
+        uint64_t* pi = (uint64_t*)(search->ptr);
+        if(has_json_escapable_byte(*pi)) {
+            break;
+        }
+        search->ptr += 8;
+    }
+
     while (search->ptr < search->end) {
         if (RB_UNLIKELY(escape_table_basic[(const unsigned char)*search->ptr])) {
             search_flush(search);
