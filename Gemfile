@@ -8,7 +8,7 @@ group :development do
   gem "rake"
   gem "rake-compiler"
   gem "test-unit"
-  gem "test-unit-ruby-core"
+  gem "test-unit-ruby-core", ">= 1.0.7"
   gem "all_images", "~> 0" unless RUBY_PLATFORM =~ /java/
 
   if ENV['BENCHMARK']
