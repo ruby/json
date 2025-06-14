@@ -20,6 +20,8 @@ typedef unsigned char _Bool;
 #endif
 #endif
 
+#include "../simd/simd.h"
+
 #ifndef RB_UNLIKELY
 #define RB_UNLIKELY(expr) expr
 #endif
@@ -857,32 +859,80 @@ static const bool string_scan[256] = {
      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 
+#if (defined(__GNUC__ ) || defined(__clang__))
+#define FORCE_INLINE __attribute__((always_inline))
+#else
+#define FORCE_INLINE
+#endif
+
+static inline bool FORCE_INLINE string_scan_basic(JSON_ParserState *state)
+{
+    while (state->cursor < state->end) {
+        if (RB_UNLIKELY(string_scan[(unsigned char)*state->cursor])) {
+            return 1;
+        }
+        *state->cursor++;
+    }
+    return 0;
+}
+
+static bool (*string_scan_impl)(JSON_ParserState *);
+
+#ifdef HAVE_SIMD
+#ifdef HAVE_SIMD_NEON
+
+static inline FORCE_INLINE bool string_scan_neon(JSON_ParserState *state)
+{
+    while (state->cursor + sizeof(uint8x16_t) <= state->end) {
+        uint8x16_t chunk = vld1q_u8((const unsigned char *)state->cursor);
+
+        // Trick: c < 32 || c == 34 can be factored as c ^ 2 < 33
+        // https://lemire.me/blog/2025/04/13/detect-control-characters-quotes-and-backslashes-efficiently-using-swar/
+        const uint8x16_t too_low_or_dbl_quote = vcltq_u8(veorq_u8(chunk, vdupq_n_u8(2)), vdupq_n_u8(33));
+
+        uint8x16_t has_backslash = vceqq_u8(chunk, vdupq_n_u8('\\'));
+        uint8x16_t needs_escape  = vorrq_u8(too_low_or_dbl_quote, has_backslash);
+        uint64_t mask = neon_match_mask(needs_escape);
+        if (mask) {
+            state->cursor += trailing_zeros64(mask) >> 2;
+            return true;
+        }
+
+        state->cursor += sizeof(uint8x16_t);
+    }
+
+    if (state->cursor < state->end) {
+        return string_scan_basic(state);
+    }
+    return 0;
+}
+#endif /* HAVE_SIMD_NEON */
+#endif /* HAVE_SIMD */
+
 static inline VALUE json_parse_string(JSON_ParserState *state, JSON_ParserConfig *config, bool is_name)
 {
     state->cursor++;
     const char *start = state->cursor;
     bool escaped = false;
 
-    while (state->cursor < state->end) {
-        if (RB_UNLIKELY(string_scan[(unsigned char)*state->cursor])) {
-            switch (*state->cursor) {
-                case '"': {
-                    VALUE string = json_decode_string(state, config, start, state->cursor, escaped, is_name);
-                    state->cursor++;
-                    return json_push_value(state, config, string);
-                }
-                case '\\': {
-                    state->cursor++;
-                    escaped = true;
-                    if ((unsigned char)*state->cursor < 0x20) {
-                        raise_parse_error("invalid ASCII control character in string: %s", state);
-                    }
-                    break;
-                }
-                default:
-                    raise_parse_error("invalid ASCII control character in string: %s", state);
-                    break;
+    while (RB_UNLIKELY(string_scan_impl(state))) {
+        switch (*state->cursor) {
+            case '"': {
+                VALUE string = json_decode_string(state, config, start, state->cursor, escaped, is_name);
+                state->cursor++;
+                return json_push_value(state, config, string);
             }
+            case '\\': {
+                state->cursor++;
+                escaped = true;
+                if ((unsigned char)*state->cursor < 0x20) {
+                    raise_parse_error("invalid ASCII control character in string: %s", state);
+                }
+                break;
+            }
+            default:
+                raise_parse_error("invalid ASCII control character in string: %s", state);
+                break;
         }
 
         state->cursor++;
@@ -1413,4 +1463,17 @@ void Init_parser(void)
     binary_encindex = rb_ascii8bit_encindex();
     utf8_encindex = rb_utf8_encindex();
     enc_utf8 = rb_utf8_encoding();
+
+switch(find_simd_implementation()) {
+#ifdef HAVE_SIMD
+#ifdef HAVE_SIMD_NEON
+        case SIMD_NEON:
+            string_scan_impl = string_scan_neon;
+            break;
+#endif /* HAVE_SIMD_NEON */
+#endif /* HAVE_SIMD */
+        default:
+            string_scan_impl = string_scan_basic;
+            break;
+    }
 }

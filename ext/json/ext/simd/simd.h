@@ -59,6 +59,20 @@ static SIMD_Implementation find_simd_implementation(void) {
 #define HAVE_SIMD 1
 #define HAVE_SIMD_NEON 1
 
+#if (defined(__GNUC__ ) || defined(__clang__))
+#define FORCE_INLINE __attribute__((always_inline))
+#else
+#define FORCE_INLINE
+#endif
+
+// See: https://community.arm.com/arm-community-blogs/b/servers-and-cloud-computing-blog/posts/porting-x86-vector-bitmask-optimizations-to-arm-neon
+static inline FORCE_INLINE uint64_t neon_match_mask(uint8x16_t matches)
+{
+    const uint8x8_t res = vshrn_n_u16(vreinterpretq_u16_u8(matches), 4);
+    const uint64_t mask = vget_lane_u64(vreinterpret_u64_u8(res), 0);
+    return mask & 0x8888888888888888ull;
+}
+
 uint8x16x4_t load_uint8x16_4(const unsigned char *table) {
   uint8x16x4_t tab;
   tab.val[0] = vld1q_u8(table);

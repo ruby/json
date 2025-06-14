@@ -5,7 +5,7 @@
 #include <math.h>
 #include <ctype.h>
 
-#include "simd.h"
+#include "../simd/simd.h"
 
 /* ruby api and some helpers */
 
@@ -302,14 +302,6 @@ static inline FORCE_INLINE unsigned char neon_next_match(search_state *search)
     search->matches_mask = mask;
     search_flush(search);
     return 1;
-}
-
-// See: https://community.arm.com/arm-community-blogs/b/servers-and-cloud-computing-blog/posts/porting-x86-vector-bitmask-optimizations-to-arm-neon
-static inline FORCE_INLINE uint64_t neon_match_mask(uint8x16_t matches)
-{
-    const uint8x8_t res = vshrn_n_u16(vreinterpretq_u16_u8(matches), 4);
-    const uint64_t mask = vget_lane_u64(vreinterpret_u64_u8(res), 0);
-    return mask & 0x8888888888888888ull;
 }
 
 static inline FORCE_INLINE uint64_t neon_rules_update(const char *ptr)
