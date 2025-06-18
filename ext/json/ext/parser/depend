@@ -1,1 +1,2 @@
 parser.o: parser.c $(srcdir)/../fbuffer/fbuffer.h
+parser.o: parser.c $(srcdir)/../simd/simd.h
