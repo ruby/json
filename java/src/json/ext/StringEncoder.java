@@ -5,6 +5,10 @@
  */
 package json.ext;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+
 import org.jcodings.Encoding;
 import org.jcodings.specific.ASCIIEncoding;
 import org.jcodings.specific.USASCIIEncoding;
@@ -16,10 +20,6 @@ import org.jruby.exceptions.RaiseException;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.util.ByteList;
 import org.jruby.util.StringSupport;
-
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 
 /**
  * An encoder that reads from the given source and outputs its representation
@@ -130,12 +130,20 @@ class StringEncoder extends ByteListTranscoder {
             new byte[] {'0', '1', '2', '3', '4', '5', '6', '7',
                         '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
-    StringEncoder(boolean scriptSafe) {
+    private StringEncoder(boolean scriptSafe) {
         this(scriptSafe ? SCRIPT_SAFE_ESCAPE_TABLE : ESCAPE_TABLE);
     }
 
     StringEncoder(byte[] escapeTable) {
         this.escapeTable = escapeTable;
+    }
+
+    public static StringEncoder scriptSafeEncoder() {
+        return new StringEncoder(SCRIPT_SAFE_ESCAPE_TABLE);
+    }
+
+    public static StringEncoder basicEncoder() {
+        return new StringEncoder(ESCAPE_TABLE);
     }
 
     // C: generate_json_string
@@ -198,41 +206,83 @@ class StringEncoder extends ByteListTranscoder {
         return str;
     }
 
+    boolean searchEscape(EscapeScanner.State state) throws IOException {
+        byte[] escapeTable = StringEncoder.this.escapeTable;
+
+        while (state.pos < state.len) {
+            state.ch = Byte.toUnsignedInt(state.ptrBytes[state.ptr + state.pos]);
+            int ch_len = escapeTable[state.ch];
+
+            if (ch_len > 0) {
+                return true;
+            }
+
+            state.pos++;
+        }
+
+        return false;
+    }
+
+    void encodeBasic(ByteList src) throws IOException {
+        byte[] hexdig = HEX;
+        byte[] scratch = aux;
+
+        EscapeScanner scanner = EscapeScanner.basicScanner();
+        EscapeScanner.State state = scanner.createState(src.unsafeBytes(), src.begin(), src.realSize(), 0);
+
+        while(scanner.scan(state)) {
+            int ch = Byte.toUnsignedInt(state.ptrBytes[state.ptr + state.pos]);
+            state.beg = state.pos = flushPos(state.pos, state.beg, state.ptrBytes, state.ptr, 1);
+            escapeAscii(ch, scratch, hexdig);
+        }
+
+        if (state.beg < state.len) {
+            append(state.ptrBytes, state.ptr + state.beg, state.len - state.beg);
+        }
+    }
+
     // C: convert_UTF8_to_JSON
     void encode(ByteList src) throws IOException {
+        if (this.escapeTable == StringEncoder.ESCAPE_TABLE) {
+            encodeBasic(src);
+            return;
+        }
+
         byte[] hexdig = HEX;
         byte[] scratch = aux;
         byte[] escapeTable = this.escapeTable;
 
-        byte[] ptrBytes = src.unsafeBytes();
-        int ptr = src.begin();
-        int len = src.realSize();
+        EscapeScanner.State state = new EscapeScanner.State();
+        state.ptrBytes = src.unsafeBytes();
+        state.ptr = src.begin();
+        state.len = src.realSize();
+        state.beg = 0;
+        state.pos = 0;
 
-        int beg = 0;
-        int pos = 0;
-
-        while (pos < len) {
-            int ch = Byte.toUnsignedInt(ptrBytes[ptr + pos]);
+        while(searchEscape(state)) {
+            // We found an escape character, so we need to flush up to this point
+            // and then handle the escape character.
+            state.beg = flushPos(state.pos, state.beg, state.ptrBytes, state.ptr, 0);
+            int ch = Byte.toUnsignedInt(state.ptrBytes[state.ptr + state.pos]);
             int ch_len = escapeTable[ch];
-            /* JSON encoding */
 
             if (ch_len > 0) {
                 switch (ch_len) {
                     case 9: {
-                        beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                        state.beg = state.pos = flushPos(state.pos, state.beg, state.ptrBytes, state.ptr, 1);
                         escapeAscii(ch, scratch, hexdig);
                         break;
                     }
                     case 11: {
-                        int b2 = Byte.toUnsignedInt(ptrBytes[ptr + pos + 1]);
+                        int b2 = Byte.toUnsignedInt(state.ptrBytes[state.ptr + state.pos + 1]);
                         if (b2 == 0x80) {
-                            int b3 = Byte.toUnsignedInt(ptrBytes[ptr + pos + 2]);
+                            int b3 = Byte.toUnsignedInt(state.ptrBytes[state.ptr + state.pos + 2]);
                             if (b3 == 0xA8) {
-                                beg = pos = flushPos(pos, beg, ptrBytes, ptr, 3);
+                                state.beg = state.pos = flushPos(state.pos, state.beg, state.ptrBytes, state.ptr, 3);
                                 append(BACKSLASH_U2028, 0, 6);
                                 break;
                             } else if (b3 == 0xA9) {
-                                beg = pos = flushPos(pos, beg, ptrBytes, ptr, 3);
+                                state.beg = state.pos = flushPos(state.pos, state.beg, state.ptrBytes, state.ptr, 3);
                                 append(BACKSLASH_U2029, 0, 6);
                                 break;
                             }
@@ -241,16 +291,17 @@ class StringEncoder extends ByteListTranscoder {
                         // fallthrough
                     }
                     default:
-                        pos += ch_len;
+                        state.pos += ch_len;
                         break;
                 }
             } else {
-                pos++;
+                // This should be unreachable.
+                state.pos++;
             }
         }
 
-        if (beg < len) {
-            append(ptrBytes, ptr + beg, len - beg);
+        if (state.beg < state.len) {
+            append(state.ptrBytes, state.ptr + state.beg, state.len - state.beg);
         }
     }
 

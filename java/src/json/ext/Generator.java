@@ -232,7 +232,7 @@ public final class Generator {
                 GeneratorState state = getState(context);
                 stringEncoder = state.asciiOnly() ?
                         new StringEncoderAsciiOnly(state.scriptSafe()) :
-                        new StringEncoder(state.scriptSafe());
+                        state.scriptSafe() ? StringEncoder.scriptSafeEncoder() : StringEncoder.basicEncoder();
             }
             return stringEncoder;
         }
