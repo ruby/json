@@ -1848,6 +1848,8 @@ static VALUE cState_allow_duplicate_key_p(VALUE self)
             return Qnil;
         case JSON_RAISE:
             return Qfalse;
+        default:
+            return Qnil;
     }
 }
 
