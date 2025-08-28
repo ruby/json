@@ -29,6 +29,8 @@ import org.jruby.util.TypeConverter;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.math.BigInteger;
 import java.util.Set;
 
@@ -37,6 +39,32 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public final class Generator {
 
     private static final int IO_BUFFER_SIZE = 8192;
+
+    private static String VECTORIZED_ESCAPE_SCANNER_CLASS = "json.ext.VectorizedStringEncoder";
+    private static String VECTORIZED_SCANNER_PROP = "json.enableVectorizedStringEncoder";
+    private static String VECTORIZED_SCANNER_DEFAULT = "false";
+    static final StringEncoder VECTORIZED_STRING_ENCODER;
+
+    static {
+        StringEncoder scanner = null;
+        String enableVectorizedScanner = System.getProperty(VECTORIZED_SCANNER_PROP, VECTORIZED_SCANNER_DEFAULT);
+        if ("true".equalsIgnoreCase(enableVectorizedScanner) || "1".equalsIgnoreCase(enableVectorizedScanner)) {
+            try {
+                Class<?> vectorEscapeScannerClass = StringEncoder.class.getClassLoader().loadClass(VECTORIZED_ESCAPE_SCANNER_CLASS);
+                Constructor<?> vectorizedEscapeScannerConstructor = vectorEscapeScannerClass.getDeclaredConstructor();
+                scanner = (StringEncoder) vectorizedEscapeScannerConstructor.newInstance();
+                System.out.println(scanner.getClass().getName() + " loaded successfully.");
+            } catch (ClassNotFoundException | NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e) {
+                // Fallback to the StringEncoder if we cannot load the VectorizedStringEncoder.
+                System.err.println("Failed to load VectorizedStringEncoder, falling back to StringEncoder:");
+                e.printStackTrace();
+                scanner = null;
+            }
+        } else {
+            System.err.println("VectorizedStringEncoder disabled.");
+        }
+        VECTORIZED_STRING_ENCODER = scanner;
+    }
 
     private Generator() {
         throw new RuntimeException();
@@ -230,9 +258,24 @@ public final class Generator {
         public StringEncoder getStringEncoder(ThreadContext context) {
             if (stringEncoder == null) {
                 GeneratorState state = getState(context);
-                stringEncoder = state.asciiOnly() ?
-                        new StringEncoderAsciiOnly(state.scriptSafe()) :
-                        new StringEncoder(state.scriptSafe());
+
+                if (state.asciiOnly()) {
+                    stringEncoder = new StringEncoderAsciiOnly(state.scriptSafe());
+                } else {
+                    if (state.scriptSafe()) {
+                        stringEncoder = StringEncoder.scriptSafeEncoder();
+                    } else {
+                        if (VECTORIZED_STRING_ENCODER != null) {
+                            stringEncoder = VECTORIZED_STRING_ENCODER;
+                        } else {
+                            // System.err.println("VectorizedStringEncoder not available, using basic StringEncoder.");
+                            stringEncoder = StringEncoder.basicEncoder();
+                        }
+                    }
+                }
+                // stringEncoder = state.asciiOnly() ?
+                //         new StringEncoderAsciiOnly(state.scriptSafe()) :
+                //         state.scriptSafe() ? StringEncoder.scriptSafeEncoder() : StringEncoder.basicEncoder();
             }
             return stringEncoder;
         }
