@@ -33,7 +33,8 @@ jobs:
     if: |
       needs.check.outputs.run_publish == 'true' &&
       github.repository == 'ruby/json' &&
-      github.ref_name == github.event.repository.default_branch
+      github.ref_name == 'try-auto-release'
+    # github.event.repository.default_branch
     runs-on: ubuntu-latest
 
     environment:
