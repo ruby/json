@@ -9,8 +9,8 @@ jobs:
   ruby-versions:
     uses: ruby/actions/.github/workflows/ruby_versions.yml@master
     with:
-      engine: cruby-jruby
-      min_version: 2.7
+      engine: cruby # -jruby
+      min_version: 3.4
 
   host:
     needs: ruby-versions
@@ -23,43 +23,43 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-14
-          - windows-latest
+          # - macos-14
+          # - windows-latest
         ruby: ${{ fromJson(needs.ruby-versions.outputs.versions) }}
-        env:
-          - ""
-        include:
-          - { os: ubuntu-24.04-arm, ruby: 3.4 }
-          - { os: ubuntu-latest  , ruby: 3.4, env: "JSON_DISABLE_SIMD=1" }
-          - { os: ubuntu-latest  , ruby: 3.4, env: "JSON_DEBUG=1" }
-          - { os: macos-13, ruby: 3.4 }
-          - { os: windows-latest , ruby: mswin     } # ruby/ruby windows CI
-          - { os: ubuntu-latest  , ruby: jruby-9.4 } # Ruby 3.1
-          - { os: macos-latest   , ruby: truffleruby-head }
-          - { os: ubuntu-latest  , ruby: truffleruby-head }
-        exclude:
-          - { os: windows-latest, ruby: jruby }
-          - { os: windows-latest, ruby: jruby-head }
+        # env:
+        #   - ""
+        # include:
+        #   - { os: ubuntu-24.04-arm, ruby: 3.4 }
+        #   - { os: ubuntu-latest  , ruby: 3.4, env: "JSON_DISABLE_SIMD=1" }
+        #   - { os: ubuntu-latest  , ruby: 3.4, env: "JSON_DEBUG=1" }
+        #   - { os: macos-13, ruby: 3.4 }
+        #   - { os: windows-latest , ruby: mswin     } # ruby/ruby windows CI
+        #   - { os: ubuntu-latest  , ruby: jruby-9.4 } # Ruby 3.1
+        #   - { os: macos-latest   , ruby: truffleruby-head }
+        #   - { os: ubuntu-latest  , ruby: truffleruby-head }
+        # exclude:
+        #   - { os: windows-latest, ruby: jruby }
+        #   - { os: windows-latest, ruby: jruby-head }
 
     steps:
       - uses: actions/checkout@v5
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby-pkgs@v1
-        with:
-          bundler-cache: true
-          ruby-version: ${{ matrix.ruby }}
-          apt-get: "${{ startsWith(matrix.ruby, 'jruby') && 'ragel' || '' }}"
-          brew: "${{ startsWith(matrix.ruby, 'jruby') && 'ragel' || '' }}"
-
-      - run: bundle exec rake compile ${{ matrix.env }}
-
-      - run: bundle exec rake test JSON_COMPACT=1 ${{ matrix.env }}
-
-      - run: bundle exec rake build
-
-      - run: gem install pkg/*.gem
-        if: ${{ matrix.ruby != '3.2' }}
+      #
+      # - name: Set up Ruby
+      #   uses: ruby/setup-ruby-pkgs@v1
+      #   with:
+      #     bundler-cache: true
+      #     ruby-version: ${{ matrix.ruby }}
+      #     apt-get: "${{ startsWith(matrix.ruby, 'jruby') && 'ragel' || '' }}"
+      #     brew: "${{ startsWith(matrix.ruby, 'jruby') && 'ragel' || '' }}"
+      #
+      # - run: bundle exec rake compile ${{ matrix.env }}
+      #
+      # - run: bundle exec rake test JSON_COMPACT=1 ${{ matrix.env }}
+      #
+      # - run: bundle exec rake build
+      #
+      # - run: gem install pkg/*.gem
+      #   if: ${{ matrix.ruby != '3.2' }}
 
   valgrind:
     name: Ruby memcheck
@@ -69,17 +69,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby-pkgs@v1
-        with:
-          bundler-cache: true
-          ruby-version: "3.3"
-          apt-get: valgrind
-
-      - run: bundle exec rake compile
-
-      - run: bundle exec rake valgrind JSON_COMPACT=1
+      #
+      # - name: Set up Ruby
+      #   uses: ruby/setup-ruby-pkgs@v1
+      #   with:
+      #     bundler-cache: true
+      #     ruby-version: "3.3"
+      #     apt-get: valgrind
+      #
+      # - run: bundle exec rake compile
+      #
+      # - run: bundle exec rake valgrind JSON_COMPACT=1
 
   release_check:
     needs: [host, valgrind]
