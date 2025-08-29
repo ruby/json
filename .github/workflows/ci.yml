@@ -123,6 +123,10 @@ jobs:
         ruby: ["ruby", "jruby"]
 
     steps:
+      - name: github.repository
+        run: echo ${{github.repository}}
+      - name: github.ref_name
+        run: echo ${{github.ref_name}}
       - name: Harden Runner
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
         with:
