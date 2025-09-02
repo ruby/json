@@ -17,6 +17,10 @@
 * Fix `JSON::Coder` to also invoke block for hash keys that aren't strings nor symbols.
 * Fix `JSON.unsafe_load` usage with proc
 
+### 2025-08-20 (0.0.0.debug1)
+
+* Testing the new release pipeline
+
 ### 2025-07-28 (2.13.2)
 
 * Improve duplicate key warning and errors to include the key name and point to the right caller.
