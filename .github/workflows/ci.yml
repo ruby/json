@@ -40,7 +40,6 @@ jobs:
           - { os: ubuntu-latest  , ruby: truffleruby-head }
         exclude:
           - { os: windows-latest, ruby: jruby }
-          - { os: windows-latest, ruby: jruby-head }
 
     steps:
       - uses: actions/checkout@v5
