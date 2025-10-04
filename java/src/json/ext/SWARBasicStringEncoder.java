@@ -27,9 +27,10 @@ public class SWARBasicStringEncoder extends StringEncoder {
         // slice a string, the underlying byte array is the same, but the
         // begin index and real size are different. When reading from the ptrBytes
         // array, we need to always add ptr to the index.
-        ByteBuffer bb = ByteBuffer.wrap(ptrBytes, ptr, len);
+        ByteBuffer bb = ByteBuffer.wrap(ptrBytes, 0, ptr + len);
+
         while (pos + 8 <= len) {
-            long x = bb.getLong(pos);
+            long x = bb.getLong(ptr + pos);
             if (skipChunk(x)) {
                 pos += 8;
                 continue;
@@ -48,7 +49,7 @@ public class SWARBasicStringEncoder extends StringEncoder {
         }
 
         if (pos + 4 <= len) {
-            int x = bb.getInt(pos);
+            int x = bb.getInt(ptr + pos);
             if (skipChunk(x)) {
                 pos += 4;
             }
