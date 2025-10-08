@@ -71,7 +71,7 @@ public class SWARBasicStringEncoder extends StringEncoder {
         }
     }
 
-    private boolean skipChunk(long x) {
+    boolean skipChunk(long x) {
         long is_ascii = 0x8080808080808080L & ~x;
         long xor2 = x ^ 0x0202020202020202L;
         long lt32_or_eq34 = xor2 - 0x2121212121212121L;
@@ -80,7 +80,7 @@ public class SWARBasicStringEncoder extends StringEncoder {
         return ((lt32_or_eq34 | eq92) & is_ascii) == 0;
     }
 
-    private boolean skipChunk(int x) {
+    boolean skipChunk(int x) {
         int is_ascii = 0x80808080 & ~x;
         int xor2 = x ^ 0x02020202;
         int lt32_or_eq34 = xor2 - 0x21212121;
