@@ -15,8 +15,6 @@ abstract class AbstractByteListDirectOutputStream extends OutputStream {
     static {
         String useSegmentedOutputStream = System.getProperty(PROP_SEGMENTED_BUFFER, PROP_SEGMENTED_BUFFER_DEFAULT);
         USE_SEGMENTED_BUFFER = Boolean.parseBoolean(useSegmentedOutputStream);
-        // XXX Is there a logger we can use here?
-        // System.out.println("Using segmented output stream: " + USE_SEGMENTED_BUFFER);
     }
 
     public static AbstractByteListDirectOutputStream create(int estimatedSize) {

@@ -7,6 +7,8 @@ package json.ext;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 
 import org.jcodings.Encoding;
@@ -114,15 +116,37 @@ class StringEncoder extends ByteListTranscoder {
 
     protected final byte[] escapeTable;
 
+    private static final String VECTORIZED_STRING_ENCODER_CLASS = "json.ext.VectorizedStringEncoder";
+    private static final String USE_VECTORIZED_BASIC_ENCODER_PROP = "jruby.json.useVectorizedBasicEncoder";
+    private static final String USE_VECTORIZED_BASIC_ENCODER_DEFAULT = "false";
+    private static final boolean USE_VECTORIZED_BASIC_ENCODER;
+    private static final StringEncoder VECTORIZED_SCANNER;
+
     private static final String USE_SWAR_BASIC_ENCODER_PROP = "jruby.json.useSWARBasicEncoder";
     private static final String USE_SWAR_BASIC_ENCODER_DEFAULT = "true";
     private static final boolean USE_BASIC_SWAR_ENCODER;
 
     static {
+        String enableVectorizedScanner = System.getProperty(USE_VECTORIZED_BASIC_ENCODER_PROP, USE_VECTORIZED_BASIC_ENCODER_DEFAULT);
+        if ("true".equalsIgnoreCase(enableVectorizedScanner) || "1".equalsIgnoreCase(enableVectorizedScanner)) {
+            StringEncoder scanner;
+            try {
+                Class<?> vectorizedStringEncoderClass = StringEncoder.class.getClassLoader().loadClass(VECTORIZED_STRING_ENCODER_CLASS);
+                Constructor<?> vectorizedStringEncoderConstructor = vectorizedStringEncoderClass.getDeclaredConstructor();
+                scanner = (StringEncoder) vectorizedStringEncoderConstructor.newInstance();
+            } catch (ClassNotFoundException | NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e) {
+                // Fallback to the StringEncoder if we cannot load the VectorizedStringEncoder.
+                scanner = null;
+            }
+            VECTORIZED_SCANNER = scanner;
+            USE_VECTORIZED_BASIC_ENCODER = scanner != null;
+        } else {
+            VECTORIZED_SCANNER = null;
+            USE_VECTORIZED_BASIC_ENCODER = false;
+        }
+
         USE_BASIC_SWAR_ENCODER = Boolean.parseBoolean(
             System.getProperty(USE_SWAR_BASIC_ENCODER_PROP, USE_SWAR_BASIC_ENCODER_DEFAULT));
-        // XXX Is there a logger we can use here?
-        // System.out.println("Using SWAR basic encoder: " + USE_BASIC_SWAR_ENCODER);
     }
 
     OutputStream out;
@@ -149,8 +173,15 @@ class StringEncoder extends ByteListTranscoder {
         this.escapeTable = escapeTable;
     }
 
+    @Override
+    public StringEncoder clone() {
+        return new StringEncoder(escapeTable);
+    }
+
     static StringEncoder createBasicEncoder() {
-        if (USE_BASIC_SWAR_ENCODER) {
+        if (USE_VECTORIZED_BASIC_ENCODER) {
+            return (StringEncoder) VECTORIZED_SCANNER.clone();
+        } else if (USE_BASIC_SWAR_ENCODER) {
             return new SWARBasicStringEncoder();
         } else {
             return new StringEncoder(false);
