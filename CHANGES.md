@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+* `JSON::Coder` now also yields to the block when encountering strings with invalid encoding.
 * Optimized floating point number parsing by integrating the ryu algorithm.
 
 ### 2025-10-25 (2.15.2)

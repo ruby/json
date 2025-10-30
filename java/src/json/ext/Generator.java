@@ -606,6 +606,8 @@ public final class Generator {
     }
 
     private static void processEntry(ThreadContext context, Session session, OutputStream buffer, RubyHash.RubyHashEntry entry, boolean firstPair, ByteList objectNl, byte[] indent, ByteList spaceBefore, ByteList space) {
+        StringEncoder encoder = session.getStringEncoder(context);
+
         IRubyObject key = (IRubyObject) entry.getKey();
         IRubyObject value = (IRubyObject) entry.getValue();
 
@@ -619,7 +621,7 @@ public final class Generator {
             Ruby runtime = context.runtime;
 
             IRubyObject keyStr = castKey(context, key);
-            if (keyStr == null || !(keyStr instanceof RubyString)) {
+            if (keyStr == null || !(keyStr instanceof RubyString) || !encoder.hasValidEncoding((RubyString)keyStr)) {
                 GeneratorState state = session.getState(context);
                 if (state.strict()) {
                     if (state.getAsJSON() != null) {
@@ -664,6 +666,19 @@ public final class Generator {
 
         @Override
         void generate(ThreadContext context, Session session, RubyString object, OutputStream buffer) throws IOException {
+            GeneratorState state = session.getState(context);
+            StringEncoder encoder = session.getStringEncoder(context);
+
+            if (state.strict() && !encoder.hasValidEncoding(object) && state.getAsJSON() != null) {
+                IRubyObject value = state.getAsJSON().call(context, object, context.getRuntime().getFalse());
+                if (value instanceof RubyString) {
+                    object = (RubyString)value;
+                } else {
+                    Handler handler = getHandlerFor(context.runtime, value);
+                    handler.generate(context, session, value, buffer);
+                    return;
+                }
+            }
             generateString(context, session, object, buffer);
         }
     }
