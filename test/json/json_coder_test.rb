@@ -67,6 +67,38 @@ class JSONCoderTest < Test::Unit::TestCase
     assert_include error.message, "NaN not allowed in JSON"
   end
 
+  def test_json_coder_string_invalid_encoding
+    coder = JSON::Coder.new do |object, is_key|
+      object
+    end
+
+    error = assert_raise JSON::GeneratorError do
+      coder.dump("\xFF")
+    end
+    assert_equal "source sequence is illegal/malformed utf-8", error.message
+
+    error = assert_raise JSON::GeneratorError do
+      coder.dump({ "\xFF" => 1 })
+    end
+    assert_equal "source sequence is illegal/malformed utf-8", error.message
+
+    coder = JSON::Coder.new do |object, is_key|
+      object.bytes
+    end
+
+    assert_equal "[255]", coder.dump("\xFF")
+    error = assert_raise JSON::GeneratorError do
+      coder.dump({ "\xFF" => 1 })
+    end
+    assert_equal "Array not allowed as object key in JSON", error.message
+
+    coder = JSON::Coder.new do |object, is_key|
+      [object].pack("m")
+    end
+    assert_equal '"/w==\\n"', coder.dump("\xFF")
+    assert_equal '{"/w==\\n":1}', coder.dump({ "\xFF" => 1 })
+  end
+
   def test_nesting_recovery
     coder = JSON::Coder.new
     ary = []

@@ -55,6 +55,11 @@ module JSON
         (Symbol === key || String === key)
       end
 
+      def self.valid_encoding?(string) # :nodoc:
+        return false unless string.encoding == ::Encoding::UTF_8 || string.encoding == ::Encoding::US_ASCII
+        string.is_a?(Symbol) || string.valid_encoding?
+      end
+
       # Convert a UTF8 encoded Ruby string _string_ to a JSON string, encoded with
       # UTF16 big endian characters as \u????, and return it.
       def self.utf8_to_json(string, script_safe = false) # :nodoc:
@@ -521,13 +526,17 @@ module JSON
               end
               result << state.indent * depth if indent
 
-              if state.strict? && !Generator.native_key?(key)
-                if state.as_json
+              if state.strict?
+                if state.as_json && (!Generator.native_key?(key) || !Generator.valid_encoding?(key))
                   key = state.as_json.call(key, true)
                 end
 
                 unless Generator.native_key?(key)
-                  raise GeneratorError.new("#{key.class} not allowed as object key in JSON", value)
+                  raise GeneratorError.new("#{key.class} not allowed as object key in JSON", key)
+                end
+
+                unless Generator.valid_encoding?(key)
+                  raise GeneratorError.new("source sequence is illegal/malformed utf-8", key)
                 end
               end
 
@@ -674,14 +683,25 @@ module JSON
           # \u????.
           def to_json(state = nil, *args)
             state = State.from_state(state)
-            if encoding == ::Encoding::UTF_8
-              unless valid_encoding?
+            string = self
+
+            if state.strict? && state.as_json
+              unless Generator.valid_encoding?(string)
+                string = state.as_json.call(string, false)
+                unless string.is_a?(::String)
+                  return string.to_json(state, *args)
+                end
+              end
+            end
+
+            if string.encoding == ::Encoding::UTF_8
+              unless string.valid_encoding?
                 raise GeneratorError.new("source sequence is illegal/malformed utf-8", self)
               end
-              string = self
             else
-              string = encode(::Encoding::UTF_8)
+              string = string.encode(::Encoding::UTF_8)
             end
+
             if state.ascii_only?
               %("#{JSON::TruffleRuby::Generator.utf8_to_json_ascii(string, state.script_safe)}")
             else

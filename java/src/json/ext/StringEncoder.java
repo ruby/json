@@ -208,6 +208,17 @@ class StringEncoder extends ByteListTranscoder {
         append('"');
     }
 
+    static boolean hasValidEncoding(RubyString str) {
+        switch (str.scanForCodeRange()) {
+            case StringSupport.CR_7BIT:
+                return true;
+            case StringSupport.CR_VALID:
+                return str.getEncoding() == UTF8Encoding.INSTANCE || str.getEncoding() == USASCIIEncoding.INSTANCE;
+            default:
+                return false;
+        }
+    }
+
     static RubyString ensureValidEncoding(ThreadContext context, RubyString str) {
         Encoding encoding = str.getEncoding();
 
