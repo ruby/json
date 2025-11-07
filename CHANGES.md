@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+* Deprecate `JSON::State#[]` and `JSON::State#[]=`. Consider using `JSON::Coder` instead.
 * `JSON::Coder` now also yields to the block when encountering strings with invalid encoding.
 * Fix GeneratorError messages to be UTF-8 encoded.
 * Fix memory leak when `Exception` is raised, or `throw` is used during JSON generation.

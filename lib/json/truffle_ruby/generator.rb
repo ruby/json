@@ -439,6 +439,8 @@ module JSON
 
         # Return the value returned by method +name+.
         def [](name)
+          ::JSON.deprecation_warning("JSON::State#[] is deprecated and will be removed in json 3.0.0")
+
           if respond_to?(name)
             __send__(name)
           else
@@ -448,6 +450,8 @@ module JSON
         end
 
         def []=(name, value)
+          ::JSON.deprecation_warning("JSON::State#[]= is deprecated and will be removed in json 3.0.0")
+
           if respond_to?(name_writer = "#{name}=")
             __send__ name_writer, value
           else
