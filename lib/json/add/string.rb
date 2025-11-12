@@ -37,7 +37,7 @@ class String
     object["raw"].pack("C*")
   end
 
-    def to_json_raw_object # :nodoc:
+  def to_json_raw_object # :nodoc:
     {
       JSON.create_id => self.class.name,
       "raw" => unpack("C*"),
