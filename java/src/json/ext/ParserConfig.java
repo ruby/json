@@ -172,6 +172,7 @@ public class ParserConfig extends RubyObject {
 
     @JRubyMethod(visibility = Visibility.PRIVATE)
     public IRubyObject initialize(ThreadContext context, IRubyObject options) {
+        checkFrozen();
         Ruby runtime = context.runtime;
 
         OptionsReader opts   = new OptionsReader(context, options);

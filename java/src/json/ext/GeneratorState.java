@@ -283,6 +283,7 @@ public class GeneratorState extends RubyObject {
 
     @JRubyMethod(name="[]=")
     public IRubyObject op_aset(ThreadContext context, IRubyObject vName, IRubyObject value) {
+        checkFrozen();
         String name = vName.asJavaString();
         String nameWriter = name + "=";
         if (getMetaClass().isMethodBound(nameWriter, true)) {
@@ -304,6 +305,7 @@ public class GeneratorState extends RubyObject {
 
     @JRubyMethod(name="indent=")
     public IRubyObject indent_set(ThreadContext context, IRubyObject indent) {
+        checkFrozen();
         this.indent = prepareByteList(context, indent);
         return indent;
     }
@@ -319,6 +321,7 @@ public class GeneratorState extends RubyObject {
 
     @JRubyMethod(name="space=")
     public IRubyObject space_set(ThreadContext context, IRubyObject space) {
+        checkFrozen();
         this.space = prepareByteList(context, space);
         return space;
     }
@@ -335,6 +338,7 @@ public class GeneratorState extends RubyObject {
     @JRubyMethod(name="space_before=")
     public IRubyObject space_before_set(ThreadContext context,
                                         IRubyObject spaceBefore) {
+        checkFrozen();
         this.spaceBefore = prepareByteList(context, spaceBefore);
         return spaceBefore;
     }
@@ -351,6 +355,7 @@ public class GeneratorState extends RubyObject {
     @JRubyMethod(name="object_nl=")
     public IRubyObject object_nl_set(ThreadContext context,
                                      IRubyObject objectNl) {
+        checkFrozen();
         this.objectNl = prepareByteList(context, objectNl);
         return objectNl;
     }
@@ -367,6 +372,7 @@ public class GeneratorState extends RubyObject {
     @JRubyMethod(name="array_nl=")
     public IRubyObject array_nl_set(ThreadContext context,
                                     IRubyObject arrayNl) {
+        checkFrozen();
         this.arrayNl = prepareByteList(context, arrayNl);
         return arrayNl;
     }
@@ -382,6 +388,7 @@ public class GeneratorState extends RubyObject {
 
     @JRubyMethod(name="as_json=")
     public IRubyObject as_json_set(ThreadContext context, IRubyObject asJSON) {
+        checkFrozen();
         if (asJSON.isNil() || asJSON == context.getRuntime().getFalse()) {
             this.asJSON = null;
         } else {
@@ -402,6 +409,7 @@ public class GeneratorState extends RubyObject {
 
     @JRubyMethod(name="max_nesting=")
     public IRubyObject max_nesting_set(IRubyObject max_nesting) {
+        checkFrozen();
         maxNesting = RubyNumeric.fix2int(max_nesting);
         return max_nesting;
     }
@@ -420,6 +428,7 @@ public class GeneratorState extends RubyObject {
 
     @JRubyMethod(name="script_safe=", alias="escape_slash=")
     public IRubyObject script_safe_set(IRubyObject script_safe) {
+        checkFrozen();
         scriptSafe = script_safe.isTrue();
         return script_safe.getRuntime().newBoolean(scriptSafe);
     }
@@ -443,6 +452,7 @@ public class GeneratorState extends RubyObject {
 
     @JRubyMethod(name="strict=")
     public IRubyObject strict_set(IRubyObject isStrict) {
+        checkFrozen();
         strict = isStrict.isTrue();
         return isStrict.getRuntime().newBoolean(strict);
     }
@@ -472,6 +482,7 @@ public class GeneratorState extends RubyObject {
 
     @JRubyMethod(name="buffer_initial_length=")
     public IRubyObject buffer_initial_length_set(IRubyObject buffer_initial_length) {
+        checkFrozen();
         int newLength = RubyNumeric.fix2int(buffer_initial_length);
         if (newLength > 0) bufferInitialLength = newLength;
         return buffer_initial_length;
@@ -488,6 +499,7 @@ public class GeneratorState extends RubyObject {
 
     @JRubyMethod(name="depth=")
     public IRubyObject depth_set(IRubyObject vDepth) {
+        checkFrozen();
         depth = RubyNumeric.fix2int(vDepth);
         return vDepth;
     }
@@ -532,6 +544,7 @@ public class GeneratorState extends RubyObject {
      */
   @JRubyMethod(visibility=Visibility.PRIVATE)
     public IRubyObject _configure(ThreadContext context, IRubyObject vOpts) {
+        checkFrozen();
         OptionsReader opts = new OptionsReader(context, vOpts);
 
         ByteList indent = opts.getString("indent");
