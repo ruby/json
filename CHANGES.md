@@ -2,6 +2,9 @@
 
 ### Unreleased
 
+* Fixed the parser to no longer ignore invalid escapes in strings.
+  Only `\"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t` and `\u` are valid JSON escapes.
+
 ### 2025-11-07 (2.16.0)
 
 * Deprecate `JSON::State#[]` and `JSON::State#[]=`. Consider using `JSON::Coder` instead.

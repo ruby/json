@@ -69,6 +69,15 @@ final class StringDecoder extends ByteListTranscoder {
         case 't':
             append('\t');
             break;
+        case '/':
+            append('/');
+            break;
+        case '"':
+            append('"');
+            break;
+        case '\\':
+            append('\\');
+            break;
         case 'u':
             ensureMin(context, 4);
             int cp = readHex(context);
@@ -81,8 +90,8 @@ final class StringDecoder extends ByteListTranscoder {
                 writeUtf8Char(cp);
             }
             break;
-        default: // '\\', '"', '/'...
-            quoteStart();
+        default:
+            throw invalidEscape(context);
         }
     }
 
@@ -171,6 +180,14 @@ final class StringDecoder extends ByteListTranscoder {
                                "but hit end near "));
         int start = surrogatePairStart != -1 ? surrogatePairStart : charStart;
         message.append(src, start, srcEnd - start);
+        return Utils.newException(context, Utils.M_PARSER_ERROR,
+                                  context.runtime.newString(message));
+    }
+
+    protected RaiseException invalidEscape(ThreadContext context) {
+        ByteList message = new ByteList(
+                ByteList.plain("invalid escape character in string: "));
+        message.append(src, charStart, srcEnd - charStart);
         return Utils.newException(context, Utils.M_PARSER_ERROR,
                                   context.runtime.newString(message));
     }
