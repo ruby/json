@@ -312,8 +312,8 @@ module JSON
         def to_h
           result = {}
           instance_variables.each do |iv|
-            iv = iv.to_s[1..-1]
-            result[iv.to_sym] = self[iv]
+            key = iv.to_s[1..-1]
+            result[key.to_sym] = instance_variable_get(iv)
           end
 
           if result[:allow_duplicate_key].nil?
