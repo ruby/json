@@ -352,10 +352,6 @@ module JSON
           dup.generate(obj, anIO)
         end
 
-        private def initialize_copy(_orig)
-          @depth = 0
-        end
-
         # Handles @allow_nan, @buffer_initial_length, other ivars must be the default value (see above)
         private def generate_json(obj, buf)
           case obj

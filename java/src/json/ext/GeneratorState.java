@@ -259,14 +259,12 @@ public class GeneratorState extends RubyObject {
     @JRubyMethod
     public IRubyObject generate_new(ThreadContext context, IRubyObject obj, IRubyObject io) {
         GeneratorState newState = (GeneratorState)dup();
-        newState.resetDepth();
         return newState.generate(context, obj, io);
     }
 
     @JRubyMethod
     public IRubyObject generate_new(ThreadContext context, IRubyObject obj) {
         GeneratorState newState = (GeneratorState)dup();
-        newState.resetDepth();
         return newState.generate(context, obj, context.nil);
     }
 
@@ -502,10 +500,6 @@ public class GeneratorState extends RubyObject {
         checkFrozen();
         depth = RubyNumeric.fix2int(vDepth);
         return vDepth;
-    }
-
-    public void resetDepth() {
-        depth = 0;
     }
 
     private ByteList prepareByteList(ThreadContext context, IRubyObject value) {
