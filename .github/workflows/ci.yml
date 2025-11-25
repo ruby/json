@@ -23,7 +23,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-14
+          - macos-latest
           - windows-latest
         ruby: ${{ fromJson(needs.ruby-versions.outputs.versions) }}
         env:
@@ -32,7 +32,7 @@ jobs:
           - { os: ubuntu-24.04-arm, ruby: 3.4 }
           - { os: ubuntu-latest  , ruby: 3.4, env: "JSON_DISABLE_SIMD=1" }
           - { os: ubuntu-latest  , ruby: 3.4, env: "JSON_DEBUG=1" }
-          - { os: macos-13, ruby: 3.4 }
+          - { os: macos-14, ruby: 3.4 }
           - { os: windows-latest , ruby: mswin     } # ruby/ruby windows CI
           - { os: macos-latest  , ruby: jruby-9.4 } # Ruby 3.1
           - { os: ubuntu-latest  , ruby: jruby-9.4 } # Ruby 3.1
