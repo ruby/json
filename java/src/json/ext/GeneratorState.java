@@ -107,7 +107,7 @@ public class GeneratorState extends RubyObject {
     /**
      * The current depth (inside a #to_json call)
      */
-    private int depth = 0;
+    protected int depth = 0;
 
     static final ObjectAllocator ALLOCATOR = GeneratorState::new;
 

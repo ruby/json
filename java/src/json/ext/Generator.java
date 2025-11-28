@@ -462,10 +462,10 @@ public final class Generator {
             generateFor(context, session, element, buffer);
         }
 
-        int oldDepth = state.decreaseDepth();
+        state.depth = --depth;
         if (!arrayNLEmpty) {
             buffer.write(arrayNLBytes, arrayNLBegin, arrayNLSize);
-            Utils.repeatWrite(buffer, indentUnit, oldDepth);
+            Utils.repeatWrite(buffer, indentUnit, depth);
         }
 
         buffer.write((byte) ']');

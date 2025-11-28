@@ -626,7 +626,7 @@ module JSON
               end
               first = false
             }
-            depth = state.depth -= 1
+            state.depth = depth -= 1
             result << state.array_nl
             result << state.indent * depth if indent
             result << ']'
