@@ -28,7 +28,14 @@ module JSON
       end
     end
 
-    require 'json/ext/parser'
+    ruby_version = /(\d+\.\d+)/.match(RUBY_VERSION)
+
+    begin
+      require "json/ext/#{ruby_version}/parser"
+    rescue LoadError
+      require "json/ext/parser"
+    end
+
     Ext::Parser::Config = Ext::ParserConfig
     JSON.parser = Ext::Parser
 
@@ -36,7 +43,11 @@ module JSON
       require 'json/truffle_ruby/generator'
       JSON.generator = JSON::TruffleRuby::Generator
     else
-      require 'json/ext/generator'
+      begin
+        require "json/ext/#{ruby_version}/generator"
+      rescue LoadError
+        require "json/ext/generator"
+      end
       JSON.generator = Generator
     end
   end
