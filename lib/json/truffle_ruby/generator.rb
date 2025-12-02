@@ -651,6 +651,9 @@ module JSON
                 if casted_value.equal?(self)
                   raise GeneratorError.new("#{self} not allowed in JSON", self)
                 end
+                unless Generator.native_type?(casted_value)
+                  raise GeneratorError.new("#{casted_value.class} returned by #{state.as_json} not allowed in JSON", casted_value)
+                end
 
                 state.check_max_nesting
                 state.depth += 1

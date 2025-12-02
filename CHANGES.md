@@ -2,8 +2,9 @@
 
 ### Unreleased
 
-* Fixed the parser to no longer ignore invalid escapes in strings.
+* Fix the parser to no longer ignore invalid escapes in strings.
   Only `\"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t` and `\u` are valid JSON escapes.
+* On TruffleRuby, fix the generator to not call `to_json` on the return value of `as_json` for `Float::NAN`.
 
 ### 2025-11-07 (2.16.0)
 
