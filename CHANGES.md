@@ -5,7 +5,12 @@
 * Improve `JSON.load` and `JSON.unsafe_load` to allow passing options as second argument.
 * Fix the parser to no longer ignore invalid escapes in strings.
   Only `\"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t` and `\u` are valid JSON escapes.
+* Fixed `JSON::Coder` to use the depth it was initialized with.
 * On TruffleRuby, fix the generator to not call `to_json` on the return value of `as_json` for `Float::NAN`.
+* Fixed handling of `state.depth`: when `to_json` changes `state.depth` but does not restore it, it is reset
+  automatically to its initial value.
+  In particular, when a `NestingError` is raised, `depth` is no longer equal to `max_nesting` after the call to
+  generate, and is reset to its initial value. Similarly when `to_json` raises an exception.
 
 ### 2025-11-07 (2.16.0)
 

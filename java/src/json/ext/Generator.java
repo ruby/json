@@ -54,7 +54,13 @@ public final class Generator {
 
     static <T extends IRubyObject> RubyString generateJson(ThreadContext context, T object, Handler<? super T> handler, IRubyObject arg0) {
         Session session = new Session(arg0);
-        return handler.generateNew(context, session, object);
+        GeneratorState state = session.getState(context);
+        int depth = state.depth;
+        try {
+            return handler.generateNew(context, session, object);
+        } finally {
+            state.depth = depth;
+        }
     }
 
     /**
@@ -79,18 +85,25 @@ public final class Generator {
             generateJson(ThreadContext context, T object,
                          GeneratorState config, IRubyObject io) {
         Session session = new Session(config);
-        Handler<? super T> handler = getHandlerFor(context.runtime, object);
+        GeneratorState state = session.getState(context);
+        int depth = state.depth;
 
-        if (io.isNil()) {
-            return handler.generateNew(context, session, object);
+        try {
+            Handler<? super T> handler = getHandlerFor(context.runtime, object);
+
+            if (io.isNil()) {
+                return handler.generateNew(context, session, object);
+            }
+
+            BufferedOutputStream buffer =
+                    new BufferedOutputStream(
+                            new PatchedIOOutputStream(io, UTF8Encoding.INSTANCE),
+                            IO_BUFFER_SIZE);
+            handler.generateToBuffer(context, session, object, buffer);
+            return io;
+        } finally {
+            state.depth = depth;
         }
-
-        BufferedOutputStream buffer =
-                new BufferedOutputStream(
-                        new PatchedIOOutputStream(io, UTF8Encoding.INSTANCE),
-                        IO_BUFFER_SIZE);
-        handler.generateToBuffer(context, session, object, buffer);
-        return io;
     }
 
     /**
@@ -784,7 +797,13 @@ public final class Generator {
             }
             throw Utils.buildGeneratorError(context, object, object + " not allowed in JSON").toThrowable();
         } else if (object.respondsTo("to_json")) {
-            IRubyObject result = object.callMethod(context, "to_json", state);
+            int depth = state.depth;
+            IRubyObject result;
+            try {
+                result = object.callMethod(context, "to_json", state);
+            } finally {
+                state.depth = depth;
+            }
             if (result instanceof RubyString) return (RubyString)result;
             throw context.runtime.newTypeError("to_json must return a String");
         } else {

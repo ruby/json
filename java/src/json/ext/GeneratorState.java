@@ -256,18 +256,6 @@ public class GeneratorState extends RubyObject {
         return generate(context, obj, context.nil);
     }
 
-    @JRubyMethod
-    public IRubyObject generate_new(ThreadContext context, IRubyObject obj, IRubyObject io) {
-        GeneratorState newState = (GeneratorState)dup();
-        return newState.generate(context, obj, io);
-    }
-
-    @JRubyMethod
-    public IRubyObject generate_new(ThreadContext context, IRubyObject obj) {
-        GeneratorState newState = (GeneratorState)dup();
-        return newState.generate(context, obj, context.nil);
-    }
-
     @JRubyMethod(name="[]")
     public IRubyObject op_aref(ThreadContext context, IRubyObject vName) {
         String name = vName.asJavaString();

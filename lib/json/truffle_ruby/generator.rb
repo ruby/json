@@ -330,6 +330,9 @@ module JSON
         # created this method raises a
         # GeneratorError exception.
         def generate(obj, anIO = nil)
+          return dup.generate(obj, anIO) if frozen?
+
+          depth = @depth
           if @indent.empty? and @space.empty? and @space_before.empty? and @object_nl.empty? and @array_nl.empty? and
               !@ascii_only and !@script_safe and @max_nesting == 0 and (!@strict || Symbol === obj)
             result = generate_json(obj, ''.dup)
@@ -346,10 +349,8 @@ module JSON
           else
             result
           end
-        end
-
-        def generate_new(obj, anIO = nil) # :nodoc:
-          dup.generate(obj, anIO)
+        ensure
+          @depth = depth unless frozen?
         end
 
         # Handles @allow_nan, @buffer_initial_length, other ivars must be the default value (see above)
@@ -490,8 +491,11 @@ module JSON
           # _depth_ is used to find out nesting depth, to indent accordingly.
           def to_json(state = nil, *)
             state = State.from_state(state)
+            depth = state.depth
             state.check_max_nesting
             json_transform(state)
+          ensure
+            state.depth = depth
           end
 
           private
@@ -555,17 +559,19 @@ module JSON
                     raise GeneratorError.new("#{value.class} returned by #{state.as_json} not allowed in JSON", value)
                   end
                   result << value.to_json(state)
+                  state.depth = depth
                 else
                   raise GeneratorError.new("#{value.class} not allowed in JSON", value)
                 end
               elsif value.respond_to?(:to_json)
                 result << value.to_json(state)
+                state.depth = depth
               else
                 result << %{"#{String(value)}"}
               end
               first = false
             }
-            depth = state.depth -= 1
+            depth -= 1
             unless first
               result << state.object_nl
               result << state.indent * depth if indent
@@ -582,8 +588,11 @@ module JSON
           # produced JSON string output further.
           def to_json(state = nil, *)
             state = State.from_state(state)
+            depth = state.depth
             state.check_max_nesting
             json_transform(state)
+          ensure
+            state.depth = depth
           end
 
           private
@@ -621,12 +630,13 @@ module JSON
                 end
               elsif value.respond_to?(:to_json)
                 result << value.to_json(state)
+                state.depth = depth
               else
                 result << %{"#{String(value)}"}
               end
               first = false
             }
-            state.depth = depth -= 1
+            depth -= 1
             result << state.array_nl
             result << state.indent * depth if indent
             result << ']'
