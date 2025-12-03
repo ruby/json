@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+* Improve `JSON.load` and `JSON.unsafe_load` to allow passing options as second argument.
 * Fix the parser to no longer ignore invalid escapes in strings.
   Only `\"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t` and `\u` are valid JSON escapes.
 * On TruffleRuby, fix the generator to not call `to_json` on the return value of `as_json` for `Float::NAN`.
