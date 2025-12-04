@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* Fix a regression in parsing of unicode surogate pairs (`\uXX\uXX`) that could cause an invalid string to be returned.
+
 ### 2025-12-03 (2.17.0)
 
 * Improve `JSON.load` and `JSON.unsafe_load` to allow passing options as second argument.
