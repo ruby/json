@@ -18,7 +18,6 @@ else
 end
 
 def implementations(ruby_obj)
-  state = JSON::State.new(JSON.dump_default_options)
   coder = JSON::Coder.new
   implementations = {
     json: ["json", proc { JSON.generate(ruby_obj) }],
