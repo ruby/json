@@ -500,11 +500,6 @@ module JSON
 
           private
 
-          def json_shift(state)
-            state.object_nl.empty? or return ''
-            state.indent * state.depth
-          end
-
           def json_transform(state)
             depth = state.depth += 1
 
