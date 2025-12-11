@@ -22,11 +22,16 @@ final class StringDecoder extends ByteListTranscoder {
      * or -1 when not.
      */
     private int surrogatePairStart = -1;
+    private boolean allowControlCharacters = false;
 
     private ByteList out;
 
     // Array used for writing multibyte characters into the buffer at once
     private final byte[] aux = new byte[4];
+
+    public StringDecoder(boolean allowControlCharacters) {
+        this.allowControlCharacters = allowControlCharacters;
+    }
 
     ByteList decode(ThreadContext context, ByteList src, int start, int end) {
         try {
@@ -40,6 +45,15 @@ final class StringDecoder extends ByteListTranscoder {
         } catch (IOException e) {
             throw context.runtime.newIOErrorFromException(e);
         }
+    }
+
+    @Override
+    protected int readUtf8Char(ThreadContext context) {
+        int c = super.readUtf8Char(context);
+        if (c < 0x20 && !allowControlCharacters) {
+            throw invalidControlChar(context);
+        }
+        return c;
     }
 
     private void handleChar(ThreadContext context, int c) throws IOException {
@@ -180,6 +194,14 @@ final class StringDecoder extends ByteListTranscoder {
                                "but hit end near "));
         int start = surrogatePairStart != -1 ? surrogatePairStart : charStart;
         message.append(src, start, srcEnd - start);
+        return Utils.newException(context, Utils.M_PARSER_ERROR,
+                                  context.runtime.newString(message));
+    }
+
+    protected RaiseException invalidControlChar(ThreadContext context) {
+        ByteList message = new ByteList(
+                ByteList.plain("invalid ASCII control character in string: "));
+        message.append(src, charStart, srcEnd - charStart);
         return Utils.newException(context, Utils.M_PARSER_ERROR,
                                   context.runtime.newString(message));
     }

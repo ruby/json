@@ -52,6 +52,7 @@ public class ParserConfig extends RubyObject {
     private int maxNesting;
     private boolean allowNaN;
     private boolean allowTrailingComma;
+    private boolean allowControlCharacters;
     private boolean allowDuplicateKey;
     private boolean deprecateDuplicateKey;
     private boolean symbolizeNames;
@@ -170,11 +171,13 @@ public class ParserConfig extends RubyObject {
 
     @JRubyMethod(visibility = Visibility.PRIVATE)
     public IRubyObject initialize(ThreadContext context, IRubyObject options) {
+        checkFrozen();
         Ruby runtime = context.runtime;
 
         OptionsReader opts   = new OptionsReader(context, options);
         this.maxNesting      = opts.getInt("max_nesting", DEFAULT_MAX_NESTING);
         this.allowNaN        = opts.getBool("allow_nan", false);
+        this.allowControlCharacters = opts.getBool("allow_control_characters", false);
         this.allowTrailingComma = opts.getBool("allow_trailing_comma", false);
         this.symbolizeNames  = opts.getBool("symbolize_names", false);
         if (opts.hasKey("allow_duplicate_key")) {
@@ -285,7 +288,7 @@ public class ParserConfig extends RubyObject {
             this.byteList = source.getByteList();
             this.data = byteList.unsafeBytes();
             this.view = new ByteList(data, false);
-            this.decoder = new StringDecoder();
+            this.decoder = new StringDecoder(config.allowControlCharacters);
         }
 
         private RaiseException parsingError(ThreadContext context, String message, int absStart, int absEnd) {
@@ -565,10 +568,10 @@ public class ParserConfig extends RubyObject {
             }
 
             main := '"'
-                    ( ( ^(["\\]|0..0x1f)
+                    ( ( ^(["\\])
                       | '\\'["\\/bfnrt]
                       | '\\u'[0-9a-fA-F]{4}
-                      | '\\'^(["\\/bfnrtu]|0..0x1f)
+                      | '\\'^(["\\/bfnrtu])
                       )* %parse_string
                     ) '"' @exit;
         }%%

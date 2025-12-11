@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* Add `:allow_control_characters` parser options, to allow JSON strings containing unescaped ASCII control characters (e.g. newlines).
+
 ### 2025-12-04 (2.17.1)
 
 * Fix a regression in parsing of unicode surogate pairs (`\uXX\uXX`) that could cause an invalid string to be returned.
