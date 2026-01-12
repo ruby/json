@@ -8,29 +8,34 @@ end
 class JSONRyuFallbackTest < Test::Unit::TestCase
   include JSON
 
-  # Test that numbers with more than 17 significant digits fall back to rb_cstr_to_dbl
+  # Test that numbers with more than 17 mantissa digits are automatically converted to BigDecimal
   def test_more_than_17_significant_digits
-    # These numbers have > 17 significant digits and should use fallback path
-    # They should still parse correctly, just not via the Ryu optimization
+    # These numbers have > 17 mantissa digits and should automatically use BigDecimal
+    # to preserve precision instead of losing it to Float rounding
 
     test_cases = [
-      # input, expected (rounded to double precision)
-      ["1.23456789012345678901234567890", 1.2345678901234567],
-      ["123456789012345678.901234567890", 1.2345678901234568e+17],
-      ["0.123456789012345678901234567890", 0.12345678901234568],
-      ["9999999999999999999999999999.9", 1.0e+28],
-      # Edge case: exactly 18 digits
-      ["123456789012345678", 123456789012345680.0],
+      # input, expected BigDecimal value
+      ["1.23456789012345678901234567890", BigDecimal("1.23456789012345678901234567890")],
+      ["123456789012345678.901234567890", BigDecimal("123456789012345678.901234567890")],
+      ["0.123456789012345678901234567890", BigDecimal("0.123456789012345678901234567890")],
+      ["9999999999999999999999999999.9", BigDecimal("9999999999999999999999999999.9")],
       # Many fractional digits
-      ["0.12345678901234567890123456789", 0.12345678901234568],
+      ["0.12345678901234567890123456789", BigDecimal("0.12345678901234567890123456789")],
     ]
 
     test_cases.each do |input, expected|
       result = JSON.parse(input)
-      assert_in_delta(expected, result, 1e-10,
-        "Failed to parse #{input} correctly (>17 digits, fallback path)")
+      assert_instance_of(BigDecimal, result,
+        "Numbers with >17 mantissa digits should be parsed as BigDecimal")
+      assert_equal(expected, result,
+        "Failed to parse #{input} correctly (>17 digits, BigDecimal path)")
     end
-  end
+
+    # Integers are parsed as Integer, not BigDecimal, even if they have > 17 digits
+    result = JSON.parse("123456789012345678")
+    assert_instance_of(Integer, result)
+    assert_equal(123456789012345678, result)
+  end if defined?(::BigDecimal)
 
   # Test decimal_class option forces fallback
   def test_decimal_class_option
@@ -68,19 +73,27 @@ class JSONRyuFallbackTest < Test::Unit::TestCase
     end
   end
 
-  # Test edge cases at the boundary (17 digits)
+  # Test edge cases at the boundary (17 mantissa digits)
   def test_seventeen_digit_boundary
-    # Exactly 17 significant digits should use Ryu
-    input_17 = "12345678901234567.0"  # Force it to be a float with .0
-    result = JSON.parse(input_17)
-    assert_in_delta(12345678901234567.0, result, 1e-10)
+    # Exactly 17 mantissa digits should use Ryu and return Float
+    # Note: "12345678901234567" is exactly 17 digits as an integer
+    input_17_int = "12345678901234567"
+    result_int = JSON.parse(input_17_int)
+    assert_instance_of(Integer, result_int)
+    assert_equal(12345678901234567, result_int)
 
-    # 18 significant digits should use fallback
-    input_18 = "123456789012345678.0"
+    # Exactly 17 mantissa digits with decimal should use Ryu and return Float
+    input_17 = "1.2345678901234567"  # 17 mantissa digits
+    result = JSON.parse(input_17)
+    assert_instance_of(Float, result)
+    assert_in_delta(1.2345678901234567, result, 1e-16)
+
+    # 18 mantissa digits should automatically use BigDecimal
+    input_18 = "1.23456789012345678"  # 18 mantissa digits
     result = JSON.parse(input_18)
-    # Note: This will be rounded to double precision
-    assert_in_delta(123456789012345680.0, result, 1e-10)
-  end
+    assert_instance_of(BigDecimal, result) if defined?(::BigDecimal)
+    assert_equal(BigDecimal("1.23456789012345678"), result)
+  end if defined?(::BigDecimal)
 
   # Test that leading zeros don't count toward the 17-digit limit
   def test_leading_zeros_dont_count

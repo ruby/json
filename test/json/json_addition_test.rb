@@ -3,7 +3,7 @@ require_relative 'test_helper'
 require 'json/add/core'
 require 'json/add/complex'
 require 'json/add/rational'
-require 'json/add/bigdecimal'
+# require 'json/add/bigdecimal' - removed in favor of simpler BigDecimal handling
 require 'json/add/ostruct'
 require 'json/add/set'
 require 'date'
@@ -174,8 +174,14 @@ class JSONAdditionTest < Test::Unit::TestCase
   end
 
   def test_bigdecimal
-    assert_equal BigDecimal('3.141', 23), JSON(JSON(BigDecimal('3.141', 23)), :create_additions => true)
-    assert_equal BigDecimal('3.141', 666), JSON(JSON(BigDecimal('3.141', 666)), :create_additions => true)
+    # BigDecimal now serializes as plain JSON numbers, not as add/bigdecimal format
+    # Round-trip: BigDecimal -> JSON -> BigDecimal (for high-precision decimals)
+    bd = BigDecimal('3.141592653589793238462643383279502884197')
+    json = JSON(bd)
+    assert_equal('3.141592653589793238462643383279502884197', json)
+    parsed = JSON.parse(json)
+    assert_instance_of(BigDecimal, parsed)
+    assert_equal(bd, parsed)
   end if defined?(::BigDecimal)
 
   def test_ostruct
