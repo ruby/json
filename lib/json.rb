@@ -591,7 +591,8 @@ require 'json/common'
 # you can craft \JSON additions of your own,
 # either for Ruby built-in classes or for user-defined classes.
 #
-# Here's a user-defined class +Foo+:
+# Here's a user-defined class +Foo+ that has accessors +:bar+ and +:baz+:
+#
 #   class Foo
 #     attr_accessor :bar, :baz
 #     def initialize(bar, baz)
@@ -600,53 +601,53 @@ require 'json/common'
 #     end
 #   end
 #
-# Here's the \JSON addition for it:
-#   # Extend class Foo with JSON addition.
+# Here, JSON.parse and JSON.generate do not use a custom addition:
+#
+#   foo0 = Foo.new(0, 1)
+#   # => #<Foo:0x0000020de76186a8 @bar=0, @baz=1>
+#   json0 = JSON.generate(foo0)
+#   # => "\"#<Foo:0x0000020de76186a8>\""
+#   obj0 = JSON.parse(json0)
+#   # => "#<Foo:0x0000020de76186a8>"
+#
+# The deserialized \JSON is a string, not a +Foo+ object:
+#
+#   obj0.class             # => String
+#   obj0.respond_to?(:bar) # => false
+#   obj0.respond_to?(:baz) # => false
+#
+# Here's a custom \JSON addition for class Foo:
+#
 #   class Foo
-#     # Serialize Foo object with its class name and arguments
+#     # Return a JSON string that captures Foo object self.
 #     def to_json(*args)
+#       accessors = [bar, baz]
 #       {
 #         JSON.create_id  => self.class.name,
-#         'a'             => [ bar, baz ]
+#         'a'             => accessors
 #       }.to_json(*args)
 #     end
-#     # Deserialize JSON string by constructing new Foo object with arguments.
+#     # Return a Foo object built from the JSON string.
 #     def self.json_create(object)
 #       new(*object['a'])
 #     end
 #   end
 #
-# Demonstration:
-#   require 'json'
-#   # This Foo object has no custom addition.
-#   foo0 = Foo.new(0, 1)
-#   json0 = JSON.generate(foo0)
-#   obj0 = JSON.parse(json0)
-#   # Lood the custom addition.
-#   require_relative 'foo_addition'
-#   # This foo has the custom addition.
+# Here, JSON.generate and JSON.parse automatically use the custom addition:
+#
 #   foo1 = Foo.new(0, 1)
+#   # => #<Foo:0x0000020de8584a38 @bar=0, @baz=1>
 #   json1 = JSON.generate(foo1)
+#   # => "{\"json_class\":\"Foo\",\"a\":[0,1]}"
 #   obj1 = JSON.parse(json1, create_additions: true)
-#   #   Make a nice display.
-#   display = <<~EOT
-#     Generated JSON:
-#       Without custom addition:  #{json0} (#{json0.class})
-#       With custom addition:     #{json1} (#{json1.class})
-#     Parsed JSON:
-#       Without custom addition:  #{obj0.inspect} (#{obj0.class})
-#       With custom addition:     #{obj1.inspect} (#{obj1.class})
-#   EOT
-#   puts display
+#   # => #<Foo:0x0000020de935b328 @bar=0, @baz=1>
 #
-# Output:
+# The deserialized \JSON is a +Foo+ object:
 #
-#   Generated JSON:
-#     Without custom addition:  "#<Foo:0x0000000006534e80>" (String)
-#     With custom addition:     {"json_class":"Foo","a":[0,1]} (String)
-#   Parsed JSON:
-#     Without custom addition:  "#<Foo:0x0000000006534e80>" (String)
-#     With custom addition:     #<Foo:0x0000000006473bb8 @bar=0, @baz=1> (Foo)
+#   foo1.class # => Foo
+#   foo1.bar   # => 0
+#   foo1.baz   # => 1
+#
 #
 module JSON
   require 'json/version'
