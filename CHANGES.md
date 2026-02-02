@@ -2,6 +2,9 @@
 
 ### Unreleased
 
+* Fix a potential crash in very specific circumstance if GC triggers during a call to `to_json`
+  without first invoking a user defined `#to_json` method.
+
 ### 2025-12-11 (2.18.0)
 
 * Add `:allow_control_characters` parser options, to allow JSON strings containing unescaped ASCII control characters (e.g. newlines).
