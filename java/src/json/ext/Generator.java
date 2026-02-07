@@ -415,12 +415,14 @@ public final class Generator {
                         return;
                     }
                 }
-                
+
                 throw Utils.buildGeneratorError(context, object, object + " not allowed in JSON").toThrowable();
             }
         }
 
-        buffer.write(Double.toString(value).getBytes(UTF_8));
+        ByteList tmp = new ByteList(24);
+        RubyFloat.formatFloat(object, tmp);
+        buffer.write(tmp.getUnsafeBytes(), tmp.getBegin(), tmp.getRealSize());
     }
 
     private static final byte[] EMPTY_ARRAY_BYTES = "[]".getBytes();
