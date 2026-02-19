@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* Add `allow_invalid_escape` parsing option to ignore backslashes that aren't followed by one of the valid escape characters.
+
 ### 2026-02-03 (2.18.1)
 
 * Fix a potential crash in very specific circumstance if GC triggers during a call to `to_json`

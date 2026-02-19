@@ -53,6 +53,7 @@ public class ParserConfig extends RubyObject {
     private boolean allowNaN;
     private boolean allowTrailingComma;
     private boolean allowControlCharacters;
+    private boolean allowInvalidEscape;
     private boolean allowDuplicateKey;
     private boolean deprecateDuplicateKey;
     private boolean symbolizeNames;
@@ -178,6 +179,7 @@ public class ParserConfig extends RubyObject {
         this.maxNesting      = opts.getInt("max_nesting", DEFAULT_MAX_NESTING);
         this.allowNaN        = opts.getBool("allow_nan", false);
         this.allowControlCharacters = opts.getBool("allow_control_characters", false);
+        this.allowInvalidEscape = opts.getBool("allow_invalid_escape", false);
         this.allowTrailingComma = opts.getBool("allow_trailing_comma", false);
         this.symbolizeNames  = opts.getBool("symbolize_names", false);
         if (opts.hasKey("allow_duplicate_key")) {
@@ -288,7 +290,7 @@ public class ParserConfig extends RubyObject {
             this.byteList = source.getByteList();
             this.data = byteList.unsafeBytes();
             this.view = new ByteList(data, false);
-            this.decoder = new StringDecoder(config.allowControlCharacters);
+            this.decoder = new StringDecoder(config.allowControlCharacters, config.allowInvalidEscape);
         }
 
         private RaiseException parsingError(ThreadContext context, String message, int absStart, int absEnd) {

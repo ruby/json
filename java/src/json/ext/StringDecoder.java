@@ -23,14 +23,16 @@ final class StringDecoder extends ByteListTranscoder {
      */
     private int surrogatePairStart = -1;
     private boolean allowControlCharacters = false;
+    private boolean allowInvalidEscape = false;
 
     private ByteList out;
 
     // Array used for writing multibyte characters into the buffer at once
     private final byte[] aux = new byte[4];
 
-    public StringDecoder(boolean allowControlCharacters) {
+    public StringDecoder(boolean allowControlCharacters, boolean allowInvalidEscape) {
         this.allowControlCharacters = allowControlCharacters;
+        this.allowInvalidEscape = allowInvalidEscape;
     }
 
     ByteList decode(ThreadContext context, ByteList src, int start, int end) {
@@ -67,7 +69,8 @@ final class StringDecoder extends ByteListTranscoder {
 
     private void handleEscapeSequence(ThreadContext context) throws IOException {
         ensureMin(context, 1);
-        switch (readUtf8Char(context)) {
+        int character = readUtf8Char(context);
+        switch (character) {
         case 'b':
             append('\b');
             break;
@@ -105,7 +108,11 @@ final class StringDecoder extends ByteListTranscoder {
             }
             break;
         default:
-            throw invalidEscape(context);
+            if (allowInvalidEscape) {
+              append(character);
+            } else {
+              throw invalidEscape(context);
+            }
         }
     }
 
