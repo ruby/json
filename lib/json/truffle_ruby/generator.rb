@@ -211,7 +211,14 @@ module JSON
 
         # This integer returns the current depth data structure nesting in the
         # generated JSON.
-        attr_accessor :depth
+        attr_reader :depth
+
+        def depth=(depth)
+          if depth.negative?
+            raise ArgumentError, "depth must be >= 0 (got #{depth})"
+          end
+          @depth = depth
+        end
 
         def check_max_nesting # :nodoc:
           return if @max_nesting.zero?
@@ -260,6 +267,11 @@ module JSON
           else
             raise TypeError, "can't convert #{opts.class} into Hash"
           end
+
+          if opts[:depth]&.negative?
+            raise ArgumentError, "depth must be >= 0 (got #{opts[:depth]})"
+          end
+
           opts.each do |key, value|
             instance_variable_set "@#{key}", value
           end

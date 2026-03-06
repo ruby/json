@@ -484,9 +484,12 @@ public class GeneratorState extends RubyObject {
     }
 
     @JRubyMethod(name="depth=")
-    public IRubyObject depth_set(IRubyObject vDepth) {
+    public IRubyObject depth_set(ThreadContext context, IRubyObject vDepth) {
         checkFrozen();
         depth = RubyNumeric.fix2int(vDepth);
+        if (depth < 0) {
+            throw context.runtime.newArgumentError("depth must be >= 0 (got: " + depth + ")");
+        }
         return vDepth;
     }
 
@@ -557,6 +560,9 @@ public class GeneratorState extends RubyObject {
         bufferInitialLength = opts.getInt("buffer_initial_length", DEFAULT_BUFFER_INITIAL_LENGTH);
 
         depth = opts.getInt("depth", 0);
+        if (depth < 0) {
+            throw context.runtime.newArgumentError("depth must be >= 0 (got: " + depth + ")");
+        }
 
         if (opts.hasKey("allow_duplicate_key")) {
             this.allowDuplicateKey = opts.getBool("allow_duplicate_key", false);
