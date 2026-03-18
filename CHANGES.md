@@ -2,6 +2,10 @@
 
 ### Unreleased
 
+### 2026-03-18 (2.17.1.2)
+
+* Fix a format string injection vulnerability in JSON.parse(doc, allow_duplicate_key: false).
+
 ### 2025-12-04 (2.17.1)
 
 * Fix a regression in parsing of unicode surogate pairs (`\uXX\uXX`) that could cause an invalid string to be returned.
