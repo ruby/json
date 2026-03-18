@@ -2,10 +2,14 @@
 
 ### Unreleased
 
+### 2026-11-13 (2.18.3)
+
+* Backport handling of unescaped control characters preceeded by a backslash from 2.19.2.
+  GHSA-cjpr-jw2g-fw99.
+
 ### 2026-11-02 (2.18.2)
 
-* Backport handling of unescaped control characters preceeded by a backslash from 2.19.3.
-  GHSA-cjpr-jw2g-fw99.
+* Fix a format string injection vulnerability in `JSON.parse(doc, allow_duplicate_key: false)`.
 
 ### 2026-02-03 (2.18.1)
 
