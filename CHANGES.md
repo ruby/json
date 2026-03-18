@@ -2,6 +2,10 @@
 
 ### Unreleased
 
+### 2026-03-18 (2.15.2.1)
+
+* Fix a format string injection vulnerability in JSON.parse(doc, allow_duplicate_key: false).
+
 ### 2025-10-25 (2.15.2)
 
 * Fix `JSON::Coder` to have one dedicated depth counter per invocation.
