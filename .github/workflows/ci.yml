@@ -29,6 +29,7 @@ jobs:
         env:
           - ""
         include:
+          - { os: ubuntu-latest  , ruby: debug }
           - { os: ubuntu-24.04-arm, ruby: 3.4 }
           - { os: ubuntu-latest  , ruby: 3.4, env: "JSON_DISABLE_SIMD=1" }
           - { os: ubuntu-latest  , ruby: 3.4, env: "JSON_DEBUG=1" }
