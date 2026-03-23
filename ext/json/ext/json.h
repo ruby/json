@@ -54,6 +54,10 @@ typedef unsigned char _Bool;
 #   define RUBY_TYPED_FROZEN_SHAREABLE 0
 #endif
 
+#ifndef HAVE_RUBY_TYPED_EMBEDDABLE
+# define RUBY_TYPED_EMBEDDABLE 0
+#endif
+
 #ifndef NORETURN
 #if defined(__has_attribute) && __has_attribute(noreturn)
 #define NORETURN(x) __attribute__((noreturn)) x
@@ -101,5 +105,7 @@ typedef unsigned char _Bool;
 #else
 #define JSON_CPU_LITTLE_ENDIAN_64BITS 0
 #endif
+
+
 
 #endif // _JSON_H_
