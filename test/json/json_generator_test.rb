@@ -493,25 +493,20 @@ class JSONGeneratorTest < Test::Unit::TestCase
     assert_equal '2', state.indent
   end
 
-  def test_broken_bignum # [ruby-core:38867]
-    pid = fork do
-      x = 1 << 64
-      x.class.class_eval do
+  if defined?(JSON::Ext::Generator) and RUBY_PLATFORM != "java"
+    def test_broken_bignum # [ruby-core:38867]
+      bignum = 1 << 64
+      original_to_s = bignum.class.instance_method(:to_s)
+      bignum.class.class_eval do
         def to_s
         end
       end
-      begin
-        JSON::Ext::Generator::State.new.generate(x)
-        exit 1
-      rescue TypeError
-        exit 0
+      assert_raise(TypeError) do
+        JSON::Ext::Generator::State.new.generate(bignum)
       end
+    ensure
+      bignum.class.define_method(:to_s, original_to_s) if original_to_s
     end
-    _, status = Process.waitpid2(pid)
-    assert status.success?
-  rescue NotImplementedError
-    # forking to avoid modifying core class of a parent process and
-    # introducing race conditions of tests are run in parallel
   end
 
   def test_hash_likeness_set_symbol
