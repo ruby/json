@@ -2,7 +2,9 @@
 
 ### Unreleased
 
-### 2026-03-08 (2.19.2)
+* Fix handling of unescaped control characters preceeded by a backslash.
+
+### 2026-03-18 (2.19.2)
 
 * Fix a format string injection vulnerability in `JSON.parse(doc, allow_duplicate_key: false)`.
 
