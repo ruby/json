@@ -178,6 +178,13 @@ class JSONParserTest < Test::Unit::TestCase
     end
   end
 
+  def test_parsse_control_char_and_backslash
+    backslash_and_control_char = "\\\t"
+    assert_raise JSON::ParserError do
+      JSON.parse(%("#{'a' * 30}#{backslash_and_control_char}"), allow_control_characters: true)
+    end
+  end
+
   def test_parse_arrays
     assert_equal([1,2,3], parse('[1,2,3]'))
     assert_equal([1.2,2,3], parse('[1.2,2,3]'))

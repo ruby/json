@@ -2,6 +2,11 @@
 
 ### Unreleased
 
+### 2026-11-02 (2.18.2)
+
+* Backport handling of unescaped control characters preceeded by a backslash from 2.19.3.
+  GHSA-cjpr-jw2g-fw99.
+
 ### 2026-02-03 (2.18.1)
 
 * Fix a potential crash in very specific circumstance if GC triggers during a call to `to_json`
