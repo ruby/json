@@ -48,7 +48,7 @@ module JSON
       SCRIPT_SAFE_ESCAPE_PATTERN = /[\/"\\\x0-\x1f\u2028-\u2029]/
 
       def self.native_type?(value) # :nodoc:
-        (false == value || true == value || nil == value || String === value || Array === value || Hash === value || Integer === value || Float === value || Fragment === value)
+        (false == value || true == value || nil == value || String === value || Symbol === value || Array === value || Hash === value || Integer === value || Float === value || Fragment === value)
       end
 
       def self.native_key?(key) # :nodoc:

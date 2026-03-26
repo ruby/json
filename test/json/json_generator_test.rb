@@ -82,6 +82,8 @@ class JSONGeneratorTest < Test::Unit::TestCase
     assert_equal '"hello"', dump(:hello, strict: true)
     assert_equal '"hello"', :hello.to_json(strict: true)
     assert_equal '"World"', "World".to_json(strict: true)
+    assert_equal '["hello"]', dump([:hello], strict: true)
+    assert_equal '{"hello":"world"}', dump({ hello: :world }, strict: true)
   end
 
   def test_not_frozen
