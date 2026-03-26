@@ -493,20 +493,27 @@ class JSONGeneratorTest < Test::Unit::TestCase
     assert_equal '2', state.indent
   end
 
-  if defined?(JSON::Ext::Generator) and RUBY_PLATFORM != "java"
-    def test_broken_bignum # [ruby-core:38867]
-      bignum = 1 << 64
-      original_to_s = bignum.class.instance_method(:to_s)
-      bignum.class.class_eval do
-        def to_s
-        end
+  def test_broken_bignum # [Bug #5173]
+    bignum = 1 << 64
+    bignum_to_s = bignum.to_s
+
+    original_to_s = bignum.class.instance_method(:to_s)
+    bignum.class.class_eval do
+      def to_s
+        nil
       end
-      assert_raise(TypeError) do
-        JSON::Ext::Generator::State.new.generate(bignum)
-      end
-    ensure
-      bignum.class.define_method(:to_s, original_to_s) if original_to_s
+      alias_method :to_s, :to_s
     end
+    case RUBY_PLATFORM
+    when "java"
+      assert_equal bignum_to_s, JSON.generate(bignum)
+    else
+      assert_raise(TypeError) do
+        JSON.generate(bignum)
+      end
+    end
+  ensure
+    bignum.class.define_method(:to_s, original_to_s) if original_to_s
   end
 
   def test_hash_likeness_set_symbol
