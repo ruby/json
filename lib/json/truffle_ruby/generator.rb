@@ -349,7 +349,7 @@ module JSON
               !@ascii_only and !@script_safe and @max_nesting == 0 and (!@strict || Symbol === obj)
             result = generate_json(obj, ''.dup)
           else
-            result = obj.to_json(self)
+            result = +obj.to_json(self)
           end
           JSON::TruffleRuby::Generator.valid_utf8?(result) or raise GeneratorError.new(
             "source sequence #{result.inspect} is illegal/malformed utf-8",
@@ -517,7 +517,7 @@ module JSON
 
             if empty?
               state.depth -= 1
-              return +'{}'
+              return '{}'
             end
 
             delim = ",#{state.object_nl}"
@@ -609,7 +609,7 @@ module JSON
 
             if empty?
               state.depth -= 1
-              return +'[]'
+              return '[]'
             end
 
             result = '['.dup
@@ -736,17 +736,17 @@ module JSON
 
         module TrueClass
           # Returns a JSON string for true: 'true'.
-          def to_json(*) +'true' end
+          def to_json(*) 'true' end
         end
 
         module FalseClass
           # Returns a JSON string for false: 'false'.
-          def to_json(*) +'false' end
+          def to_json(*) 'false' end
         end
 
         module NilClass
           # Returns a JSON string for nil: 'null'.
-          def to_json(*) +'null' end
+          def to_json(*) 'null' end
         end
       end
     end
