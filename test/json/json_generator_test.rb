@@ -504,10 +504,14 @@ class JSONGeneratorTest < Test::Unit::TestCase
       end
       alias_method :to_s, :to_s
     end
-    case RUBY_PLATFORM
-    when "java"
+    case RUBY_ENGINE
+    when "jruby"
       assert_equal bignum_to_s, JSON.generate(bignum)
-    else
+    when "truffleruby"
+      assert_raise(NoMethodError) do
+        JSON.generate(bignum)
+      end
+    when "ruby"
       assert_raise(TypeError) do
         JSON.generate(bignum)
       end
