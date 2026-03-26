@@ -521,7 +521,7 @@ module JSON
             end
 
             delim = ",#{state.object_nl}"
-            result = +"{#{state.object_nl}"
+            result = "{#{state.object_nl}"
             first = true
             key_type = nil
             indent = !state.object_nl.empty?
@@ -558,7 +558,7 @@ module JSON
                 raise TypeError, "#{key.class}#to_s returns an instance of #{key_str.class}, expected a String"
               end
 
-              result = +"#{result}#{key_json}#{state.space_before}:#{state.space}"
+              result = "#{result}#{key_json}#{state.space_before}:#{state.space}"
               if state.strict? && !Generator.native_type?(value)
                 if state.as_json
                   value = state.as_json.call(value, false)
