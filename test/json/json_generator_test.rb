@@ -84,6 +84,24 @@ class JSONGeneratorTest < Test::Unit::TestCase
     assert_equal '"World"', "World".to_json(strict: true)
   end
 
+  def test_not_frozen
+    [
+      [[], '[]'],
+      [{}, '{}'],
+      ["string", '"string"'],
+      [:sym, '"sym"'],
+      [1, '1'],
+      [1.0, '1.0'],
+      [true, 'true'],
+      [false, 'false'],
+      [nil, 'null'],
+    ].each do |(obj, exp)|
+      dumped = dump(obj, strict: true)
+      assert_equal exp, dumped
+      refute_predicate dumped, :frozen?
+    end
+  end
+
   def test_state_depth_to_json
     depth = Object.new
     def depth.to_json(state)
