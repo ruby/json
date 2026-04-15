@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* Fix parsing of out of range floats (very large exponents that lead ot either `0.0` or `Inf`).
+
 ### 2026-03-25 (2.19.3)
 
 * Fix handling of unescaped control characters preceeded by a backslash.

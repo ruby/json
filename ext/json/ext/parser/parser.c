@@ -855,12 +855,20 @@ NOINLINE(static) VALUE json_decode_large_float(const char *start, long len)
 /* Ruby JSON optimized float decoder using vendored Ryu algorithm
  * Accepts pre-extracted mantissa and exponent from first-pass validation
  */
-static inline VALUE json_decode_float(JSON_ParserConfig *config, uint64_t mantissa, int mantissa_digits, int32_t exponent, bool negative,
+static inline VALUE json_decode_float(JSON_ParserConfig *config, uint64_t mantissa, int mantissa_digits, int64_t exponent, bool negative,
                                           const char *start, const char *end)
 {
     if (RB_UNLIKELY(config->decimal_class)) {
         VALUE text = rb_str_new(start, end - start);
         return rb_funcallv(config->decimal_class, config->decimal_method_id, 1, &text);
+    }
+
+    if (RB_UNLIKELY(exponent > INT32_MAX)) {
+        return CInfinity;
+    }
+
+    if (RB_UNLIKELY(exponent < INT32_MIN)) {
+        return rb_float_new(0.0);
     }
 
     // Fall back to rb_cstr_to_dbl for potential subnormals (rare edge case)
@@ -869,7 +877,7 @@ static inline VALUE json_decode_float(JSON_ParserConfig *config, uint64_t mantis
         return json_decode_large_float(start, end - start);
     }
 
-    return DBL2NUM(ryu_s2d_from_parts(mantissa, mantissa_digits, exponent, negative));
+    return DBL2NUM(ryu_s2d_from_parts(mantissa, mantissa_digits, (int32_t)exponent, negative));
 }
 
 static inline VALUE json_decode_array(JSON_ParserState *state, JSON_ParserConfig *config, long count)
@@ -1144,7 +1152,7 @@ static inline VALUE json_parse_number(JSON_ParserState *state, JSON_ParserConfig
     const char first_digit = *state->cursor;
 
     // Variables for Ryu optimization - extract digits during parsing
-    int32_t exponent = 0;
+    int64_t exponent = 0;
     int decimal_point_pos = -1;
     uint64_t mantissa = 0;
 
@@ -1188,7 +1196,7 @@ static inline VALUE json_parse_number(JSON_ParserState *state, JSON_ParserConfig
             raise_parse_error_at("invalid number: %s", state, start);
         }
 
-        exponent = negative_exponent ? -((int32_t)abs_exponent) : ((int32_t)abs_exponent);
+        exponent = negative_exponent ? -abs_exponent : abs_exponent;
     }
 
     if (integer) {
