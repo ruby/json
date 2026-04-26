@@ -37,8 +37,8 @@ jobs:
           - { os: windows-latest , ruby: mswin     } # ruby/ruby windows CI
           - { os: macos-latest  , ruby: jruby-9.4 } # Ruby 3.1
           - { os: ubuntu-latest  , ruby: jruby-9.4 } # Ruby 3.1
-          - { os: macos-latest   , ruby: truffleruby-head }
-          - { os: ubuntu-latest  , ruby: truffleruby-head }
+          - { os: macos-latest   , ruby: truffleruby }
+          - { os: ubuntu-latest  , ruby: truffleruby }
         exclude:
           - { os: windows-latest, ruby: jruby }
 
