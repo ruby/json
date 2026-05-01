@@ -364,6 +364,7 @@ typedef struct JSON_ParserStateStruct {
     rvalue_cache name_cache;
     int in_array;
     int current_nesting;
+    unsigned int emitted_deprecations;
 } JSON_ParserState;
 
 static inline size_t rest(JSON_ParserState *state) {
@@ -945,7 +946,12 @@ static inline VALUE json_decode_object(JSON_ParserState *state, JSON_ParserConfi
             case JSON_IGNORE:
                 break;
             case JSON_DEPRECATED:
-                emit_duplicate_key_warning(state, json_find_duplicated_key(count, pairs));
+                // Only emit the first few deprecations to avoid spamming.
+                if (state->emitted_deprecations < 5) {
+                    emit_duplicate_key_warning(state, json_find_duplicated_key(count, pairs));
+                    state->emitted_deprecations++;
+                }
+
                 break;
             case JSON_RAISE:
                 raise_duplicate_key_error(state, json_find_duplicated_key(count, pairs));

@@ -283,6 +283,7 @@ public class ParserConfig extends RubyObject {
         private final byte[] data;
         private final StringDecoder decoder;
         private int currentNesting = 0;
+        private int emittedDeprecations = 0;
 
         private ParserSession(ParserConfig config, RubyString source, ThreadContext context, RuntimeInfo info) {
             this.config = config;
@@ -695,7 +696,8 @@ public class ParserConfig extends RubyObject {
 
                     if (!config.allowDuplicateKey) {
                         if (((RubyHash)result).hasKey(lastName)) {
-                            if (config.deprecateDuplicateKey) {
+                            if (config.deprecateDuplicateKey && emittedDeprecations < 5) {
+                                emittedDeprecations++;
                                 context.runtime.getWarnings().warning(
                                     "detected duplicate key " + name.inspect() + " in JSON object. This will raise an error in json 3.0 unless enabled via `allow_duplicate_key: true`"
                                 );
