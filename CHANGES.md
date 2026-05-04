@@ -2,6 +2,10 @@
 
 ### Unreleased
 
+### 2026-05-04 (2.19.5)
+
+* Cap the parser to emit a maximum of 5 deprecation warnings per document. Emitting more is not helpful.
+
 ### 2026-04-19 (2.19.4)
 
 * Fix parsing of out of range floats (very large exponents that lead to either `0.0` or `Inf`).
