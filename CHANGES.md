@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* Cleanly handle overly large `depth` generator argument.
+
 ### 2026-05-04 (2.19.5)
 
 * Cap the parser to emit a maximum of 5 deprecation warnings per document. Emitting more is not helpful.
