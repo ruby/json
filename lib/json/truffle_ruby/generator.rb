@@ -307,6 +307,9 @@ module JSON
           if !opts.key?(:max_nesting) # defaults to 100
             @max_nesting = 100
           elsif opts[:max_nesting]
+            unless opts[:max_nesting].is_a?(Integer)
+              raise TypeError, ":max_nesting must be an Integer, got: #{opts[:max_nesting].class}"
+            end
             @max_nesting = opts[:max_nesting]
           else
             @max_nesting = 0

@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* Handle invalid types passed as `max_nesting` option.
+
 ### 2026-05-28 (2.19.7)
 
 * Fix some more edge cases with out of range floats.
