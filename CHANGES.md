@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* Integrate with Ruby 4.1 `ruby_sized_xfree`.
+
 ### 2026-06-03 (2.19.8)
 
 * Fix 1-byte buffer overread on EOS errors.
