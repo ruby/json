@@ -2245,17 +2245,36 @@ static VALUE cResumableParser_feed(VALUE self, VALUE str)
 {
     rb_check_frozen(self);
     str = convert_encoding(str);
+    if (!RSTRING_LEN(str)) {
+        return self;
+    }
 
     JSON_ResumableParser *parser = cResumableParser_get(self);
 
-    // TODO: Figure out some efficient buffering. Shrink buffer, etc.
-    // This is just a quick stub to see what changes the parser need to be resumable
+    size_t offset = parser->state.cursor - parser->state.start;
+    const size_t remaining = parser->state.end - parser->state.cursor;
 
-    const size_t offset = parser->state.cursor - parser->state.start;
-    if (parser->buffer) {
-        rb_str_append(parser->buffer, str);
+    if (!remaining) {
+        parser->buffer = RB_OBJ_FROZEN_RAW(str) ? str : rb_obj_hide(rb_str_new_shared(str));
+        offset = 0;
     } else {
-        RB_OBJ_WRITE(self, &parser->buffer, rb_str_new_shared(str));
+        JSON_ASSERT(parser->buffer);
+
+        const size_t size = parser->state.end - parser->state.start;
+        const size_t consumed = size - remaining;
+        char *old_ptr = RSTRING_PTR(parser->buffer);
+
+        if (RB_OBJ_FROZEN_RAW(parser->buffer)) {
+            VALUE new_buffer = rb_obj_hide(rb_str_buf_new(remaining + RSTRING_LEN(str)));
+            MEMCPY(RSTRING_PTR(new_buffer), old_ptr + consumed, char, remaining);
+            offset = 0;
+            parser->buffer = new_buffer;
+        } else if (consumed > (size / 2) && size >= 512) {
+            MEMMOVE(old_ptr, old_ptr + consumed, char, remaining);
+            rb_str_set_len(parser->buffer, remaining);
+            offset = 0;
+        }
+        rb_str_append(parser->buffer, str);
     }
 
     long len;
