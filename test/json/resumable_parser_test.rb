@@ -64,8 +64,12 @@ class JSONResumageParserTest < Test::Unit::TestCase
     # Top values other than arrays and objects are ambiguous.
     # e.g. if you stream numbers without a separator: 123 followed by 456 is ambiguous with 123456.
     assert_resumed_parsing('123 ')
-    # assert_resumed_parsing('123tru')
-    # assert_resumed_parsing('e')
+  end
+
+  def test_rest
+    @parser << '[1, 2, 3, "unterminated string'
+    refute @parser.parse
+    assert_equal '"unterminated string', @parser.rest
   end
 
   private

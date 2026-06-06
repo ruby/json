@@ -2331,6 +2331,22 @@ static VALUE cResumableParser_value(VALUE self)
     }
 }
 
+// TODO: doc
+static VALUE cResumableParser_rest(VALUE self)
+{
+    JSON_ResumableParser *parser = cResumableParser_get(self);
+
+    if (!parser->buffer) {
+        return rb_utf8_str_new("", 0);
+    }
+
+    size_t offset = parser->state.cursor - parser->state.start;
+    const char *ptr;
+    long len;
+    RSTRING_GETMEM(parser->buffer, ptr, len);
+    return rb_utf8_str_new(ptr + offset, len - offset);
+}
+
 void Init_parser(void)
 {
 #ifdef HAVE_RB_EXT_RACTOR_SAFE
@@ -2362,6 +2378,7 @@ void Init_parser(void)
     rb_define_method(cResumableParser, "<<", cResumableParser_feed, 1);
     rb_define_method(cResumableParser, "parse", cResumableParser_parse, 0);
     rb_define_method(cResumableParser, "value", cResumableParser_value, 0);
+    rb_define_method(cResumableParser, "rest", cResumableParser_rest, 0);
 
     rb_global_variable(&CNaN);
     CNaN = rb_const_get(mJSON, rb_intern("NaN"));
