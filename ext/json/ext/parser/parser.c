@@ -1581,7 +1581,7 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
                     }
                 }
 
-                if (resumable && peek(state) == 0) {
+                if (resumable && eos(state)) {
                     state->cursor = start;
                     return false;
                 }
@@ -1596,7 +1596,7 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
                 const char *start = state->cursor;
                 value = json_parse_positive_number(state, config);
 
-                if (resumable && peek(state) == 0) {
+                if (resumable && eos(state)) {
                     state->cursor = start;
                     return false;
                 }
@@ -1662,7 +1662,7 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
                     state->cursor++;
                     value = json_decode_object(state, config, 0);
                     break;
-                } else if (resumable && peek(state) == 0) {
+                } else if (resumable && eos(state)) {
                     state->cursor = object_start_cursor;
                     return false;
                 }
@@ -1726,7 +1726,7 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
             json_push_value(state, config, string);
             frame->phase = JSON_PHASE_OBJECT_COLON;
             goto JSON_PHASE_OBJECT_COLON;
-        } else if (resumable && peek(state) == 0) {
+        } else if (resumable && eos(state)) {
             return false;
         } else {
             // The message differs for the first key vs. a key after a
@@ -1750,7 +1750,7 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
             state->cursor++;
             frame->phase = JSON_PHASE_VALUE;
             goto JSON_PHASE_VALUE;
-        } else if (resumable && peek(state) == 0) {
+        } else if (resumable && eos(state)) {
             return false;
         } else {
             // First colon (only the first pair's key is pushed, nothing
