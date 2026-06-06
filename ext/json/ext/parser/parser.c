@@ -374,7 +374,7 @@ typedef struct json_frame_struct {
     enum json_frame_type type;
     enum json_frame_phase phase;
     long value_stack_head;    // rvalue_stack->head when this container opened
-    const char *start_cursor; // object frames only (the '{'); NULL otherwise
+    size_t start_offset; // object frames only (the '{'); NULL otherwise
 } json_frame;
 
 typedef struct json_frame_stack_struct {
@@ -1677,7 +1677,7 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
                     .type = JSON_FRAME_OBJECT,
                     .phase = JSON_PHASE_OBJECT_KEY,
                     .value_stack_head = state->value_stack->head,
-                    .start_cursor = object_start_cursor,
+                    .start_offset = object_start_cursor - state->start,
                 });
                 goto JSON_PHASE_OBJECT_KEY;
             }
@@ -1835,7 +1835,7 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
 
             // Temporary rewind cursor in case an error is raised
             const char *final_cursor = state->cursor;
-            state->cursor = frame->start_cursor;
+            state->cursor = state->start + frame->start_offset;
             VALUE object = json_decode_object(state, config, count);
             state->cursor = final_cursor;
 
@@ -2251,7 +2251,6 @@ static VALUE cResumableParser_feed(VALUE self, VALUE str)
     // TODO: Figure out some efficient buffering. Shrink buffer, etc.
     // This is just a quick stub to see what changes the parser need to be resumable
 
-    // TODO: We also store some cursors in the frame stack (JSON_FRAME_OBJECT)
     const size_t offset = parser->state.cursor - parser->state.start;
     if (parser->buffer) {
         rb_str_append(parser->buffer, str);
