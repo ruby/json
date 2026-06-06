@@ -226,10 +226,6 @@ static VALUE rvalue_stack_push(rvalue_stack *stack, VALUE value, VALUE *handle, 
     stack->ptr[stack->head] = value;
     stack->head++;
 
-    if (*handle) {
-        RB_OBJ_WRITTEN(*handle, Qundef, value);
-    }
-
     return value;
 }
 
