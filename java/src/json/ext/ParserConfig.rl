@@ -52,6 +52,8 @@ public class ParserConfig extends RubyObject {
     private int maxNesting;
     private boolean allowNaN;
     private boolean allowTrailingComma;
+    private boolean allowComments;
+    private boolean deprecateComments;
     private boolean allowControlCharacters;
     private boolean allowInvalidEscape;
     private boolean allowDuplicateKey;
@@ -178,6 +180,14 @@ public class ParserConfig extends RubyObject {
         OptionsReader opts   = new OptionsReader(context, options);
         this.maxNesting      = opts.getInt("max_nesting", DEFAULT_MAX_NESTING);
         this.allowNaN        = opts.getBool("allow_nan", false);
+        if (opts.hasKey("allow_comments")) {
+            this.allowComments = opts.getBool("allow_comments", false);
+            this.deprecateComments = false;
+        } else {
+            this.allowComments = true;
+            this.deprecateComments = true;
+        }
+
         this.allowControlCharacters = opts.getBool("allow_control_characters", false);
         this.allowInvalidEscape = opts.getBool("allow_invalid_escape", false);
         this.allowTrailingComma = opts.getBool("allow_trailing_comma", false);
@@ -308,11 +318,26 @@ public class ParserConfig extends RubyObject {
         %%{
             machine JSON_common;
 
+            action parse_comment {
+                if (!config.allowComments) {
+                    if (config.deprecateComments) {
+                        if (config.deprecateDuplicateKey && emittedDeprecations < 5) {
+                            emittedDeprecations++;
+                            context.runtime.getWarnings().warning(
+                                "Encountered comment in JSON. This will raise an error in json 3.0 unless enabled via `allow_comments: true`"
+                            );
+                        }
+                    } else {
+                        throw unexpectedToken(context, p, pe);
+                    }
+                }
+            }
+
             cr                  = '\n';
             cr_neg              = [^\n];
             ws                  = [ \t\r\n];
-            c_comment           = '/*' ( any* - (any* '*/' any* ) ) '*/';
-            cpp_comment         = '//' cr_neg* cr;
+            c_comment           = '/*' ( any* - (any* '*/' any* ) ) '*/' >parse_comment;
+            cpp_comment         = '//' cr_neg* cr >parse_comment;
             comment             = c_comment | cpp_comment;
             ignore              = ws | comment;
             name_separator      = ':';
@@ -331,6 +356,7 @@ public class ParserConfig extends RubyObject {
             begin_string        = '"';
             begin_name          = begin_string;
             begin_number        = digit | '-';
+
         }%%
 
         %%{
