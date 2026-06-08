@@ -2,6 +2,9 @@
 
 ### Unreleased
 
+* Fix buffer overflow that could lead to a crash when writing JSON directly into an IO
+  with `JSON.generate(object, io)`. [CVE-PENDING].
+
 ### 2026-06-03 (2.19.8)
 
 * Fix 1-byte buffer overread on EOS errors.
