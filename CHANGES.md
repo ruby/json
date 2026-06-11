@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+### 2026-06-11 (2.19.9)
+
 * Fix buffer overflow that could lead to a crash when writing JSON directly into an IO
   with `JSON.generate(object, io)`. [CVE-PENDING].
 
