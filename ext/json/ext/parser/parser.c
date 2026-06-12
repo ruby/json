@@ -1805,9 +1805,10 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
             state->current_nesting--;
             state->in_array--;
 
-            json_frame_stack_pop(state->frames);
             json_push_value(state, config, json_decode_array(state, config, count));
+            json_frame_stack_pop(state->frames);
             frame = json_frame_stack_peek(state->frames);
+
             json_value_completed(frame);
 
             switch (frame->phase) {
@@ -2315,10 +2316,24 @@ static VALUE json_parse_any_resumable_safe(VALUE _args)
     return (VALUE)json_parse_any(args->state, args->config, true);
 }
 
+static JSON_ResumableParser *ResumableParser_acquire(VALUE self)
+{
+    JSON_ResumableParser *parser = cResumableParser_get(self);
+    // self may have moved, so we need to update all pointers
+    // Investigate: We might be better off keeping JSON_ParserState on the stack
+    // and only persist what we need.
+    parser->state.value_stack_handle = &self;
+    parser->state.frame_stack_handle = &self;
+    parser->state.value_stack = &parser->value_stack;
+    parser->state.frames = &parser->frames;
+
+    return parser;
+}
+
 // TODO: doc
 static VALUE cResumableParser_parse(VALUE self)
 {
-    JSON_ResumableParser *parser = cResumableParser_get(self);
+    JSON_ResumableParser *parser = ResumableParser_acquire(self);
     if (!parser->buffer) {
         return Qfalse;
     }
@@ -2326,17 +2341,12 @@ static VALUE cResumableParser_parse(VALUE self)
 
     // TODO: prevent reentrancy
 
-    // self may have moved, so we need to update all pointers
-    // We might be better off keeping JSON_ParserState on the stack
-    // and only persist what we need.
-    parser->state.value_stack_handle = &self;
-    parser->state.frame_stack_handle = &self;
-    parser->state.value_stack = &parser->value_stack;
-    parser->state.frames = &parser->frames;
-
     json_frame *frame = json_frame_stack_peek(&parser->frames);
 
     if (frame->phase == JSON_PHASE_DONE) {
+        JSON_ASSERT(parser->value_stack.head == 1);
+        JSON_ASSERT(parser->frames.head == 1);
+
         frame->phase = JSON_PHASE_VALUE;
         rvalue_stack_pop(parser->state.value_stack, 1);
     }
@@ -2362,7 +2372,7 @@ static VALUE cResumableParser_parse(VALUE self)
 // TODO: doc
 static VALUE cResumableParser_value(VALUE self)
 {
-    JSON_ResumableParser *parser = cResumableParser_get(self);
+    JSON_ResumableParser *parser = ResumableParser_acquire(self);
     json_frame *frame = json_frame_stack_peek(&parser->frames);
 
     if (frame->phase == JSON_PHASE_DONE) {
@@ -2370,6 +2380,73 @@ static VALUE cResumableParser_value(VALUE self)
     } else {
         rb_raise(rb_eArgError, "no ready value"); // TODO: Figure out the best exception and message
     }
+}
+
+// TODO: doc
+static VALUE cResumableParser_partial_value(VALUE self)
+{
+    JSON_ResumableParser *original_parser = ResumableParser_acquire(self);
+    JSON_ResumableParser parser = *original_parser;
+
+    if (parser.value_stack.head == 0) {
+        return Qnil;
+    }
+
+    json_frame *frame = json_frame_stack_peek(parser.state.frames);
+    long missing_object_value = 0;
+    if (frame->type == JSON_FRAME_OBJECT && (frame->phase == JSON_PHASE_VALUE || frame->phase == JSON_PHASE_OBJECT_COLON)) {
+        missing_object_value = 1;
+    }
+
+    // Copy the value stack as we need to mutate it.
+    long capa = parser.value_stack.head;
+    parser.value_stack.capa = (capa + missing_object_value);
+    VALUE tmpbuf, *value_stack_buffer = ALLOCV_N(VALUE, tmpbuf, capa + missing_object_value);
+    MEMCPY(value_stack_buffer, parser.value_stack.ptr, VALUE, parser.value_stack.capa);
+    parser.value_stack.ptr = value_stack_buffer;
+
+    JSON_ParserState *state = &parser.state;
+    JSON_ParserConfig *config = &parser.config;
+
+    if (missing_object_value) {
+        rvalue_stack_push(state->value_stack, Qnil, NULL, &state->value_stack);
+    }
+
+    VALUE partial_result = Qundef;
+
+    while (UNDEF_P(partial_result)) {
+        frame = json_frame_stack_peek(state->frames);
+
+        switch (frame->type) {
+            case JSON_FRAME_ROOT: {
+                partial_result = *rvalue_stack_peek(state->value_stack, 1);
+                break;
+            }
+
+            case JSON_FRAME_ARRAY: {
+                long count = json_frame_entry_count(frame, state->value_stack);
+                json_push_value(state, config, json_decode_array(state, config, count));
+                json_frame_stack_pop(state->frames);
+
+                break;
+            }
+
+            case JSON_FRAME_OBJECT: {
+                long count = json_frame_entry_count(frame, state->value_stack);
+                json_push_value(state, config, json_decode_object(state, config, count));
+                json_frame_stack_pop(state->frames);
+                break;
+            }
+
+            default: {
+                JSON_UNREACHABLE_RETURN(Qundef);
+                break;
+            }
+        }
+    }
+
+    ALLOCV_END(tmpbuf);
+    return partial_result;
 }
 
 // TODO: doc
@@ -2419,6 +2496,7 @@ void Init_parser(void)
     rb_define_method(cResumableParser, "<<", cResumableParser_feed, 1);
     rb_define_method(cResumableParser, "parse", cResumableParser_parse, 0);
     rb_define_method(cResumableParser, "value", cResumableParser_value, 0);
+    rb_define_method(cResumableParser, "partial_value", cResumableParser_partial_value, 0);
     rb_define_method(cResumableParser, "rest", cResumableParser_rest, 0);
 
     rb_global_variable(&CNaN);

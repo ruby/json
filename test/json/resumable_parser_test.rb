@@ -72,7 +72,27 @@ class JSONResumageParserTest < Test::Unit::TestCase
     assert_equal '"unterminated string', @parser.rest
   end
 
+  def test_partial_value
+    assert_partial_value [1, 2, 3], '[1, 2, 3, "unterminated string'
+    assert_partial_value({ "a" => 1, "b" => { "c" => nil } }, '{ "a": 1, "b": { "c": "unterminated string')
+    assert_partial_value({ "a" => 1, "b" => { "c" => nil } }, '{ "a": 1, "b": { "c"')
+    assert_partial_value([1, { "a" => 1, "b" => { "c" => nil } }], '[1, { "a": 1, "b": { "c"')
+  end
+
+  def test_partial_value_missing
+    assert_nil @parser.partial_value
+  end
+
   private
+
+  def assert_partial_value(expected, json)
+    parser = new_parser
+    parser << json
+    refute parser.parse
+    2.times do
+      assert_equal expected, parser.partial_value
+    end
+  end
 
   def assert_resumed_parsing(json, parser = @parser)
     expected = JSON.parse(json)
