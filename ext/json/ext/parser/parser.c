@@ -58,6 +58,20 @@ typedef struct rvalue_cache_struct {
     VALUE entries[JSON_RVALUE_CACHE_CAPA];
 } rvalue_cache;
 
+static void rvalue_cache_mark(rvalue_cache *cache)
+{
+    for (int index = 0; index < cache->length; index++) {
+        rb_gc_mark_movable(cache->entries[index]);
+    }
+}
+
+static void rvalue_cache_compact(rvalue_cache *cache)
+{
+    for (int index = 0; index < cache->length; index++) {
+        cache->entries[index] = rb_gc_location(cache->entries[index]);
+    }
+}
+
 static rb_encoding *enc_utf8;
 
 #define JSON_RVALUE_CACHE_MAX_ENTRY_LENGTH 55
@@ -2177,6 +2191,7 @@ static void JSON_ResumableParser_mark(void *ptr)
     JSON_ResumableParser *parser = (JSON_ResumableParser *)ptr;
     JSON_ParserConfig_mark(&parser->config);
     rvalue_stack_mark(&parser->value_stack);
+    rvalue_cache_mark(&parser->state.name_cache);
     rb_gc_mark_movable(parser->buffer);
 }
 
@@ -2210,6 +2225,7 @@ static void JSON_ResumableParser_compact(void *ptr)
     JSON_ResumableParser *parser = (JSON_ResumableParser *)ptr;
     JSON_ParserConfig_compact(&parser->config);
     rvalue_stack_compact(&parser->value_stack);
+    rvalue_cache_compact(&parser->state.name_cache);
     parser->buffer = rb_gc_location(parser->buffer);
 }
 
@@ -2236,6 +2252,7 @@ static VALUE cResumableParser_allocate(VALUE klass)
         .type = JSON_FRAME_ROOT,
         .phase = JSON_PHASE_VALUE,
     });
+    parser->state.in_array++;
     return obj;
 }
 
