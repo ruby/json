@@ -83,6 +83,23 @@ class JSONResumageParserTest < Test::Unit::TestCase
     assert_nil @parser.partial_value
   end
 
+  def test_assert_reentrency_prevented
+    called = false
+    parser = nil
+    callback = ->(_o) do
+      unless called
+        called = true
+        parser.parse
+      end
+    end
+    parser = new_parser(on_load: callback)
+    parser << '[]'
+    error = assert_raise ArgumentError do
+      parser.parse
+    end
+    assert_equal "ResumableParser can't be used recursively", error.message
+  end
+
   private
 
   def assert_partial_value(expected, json)

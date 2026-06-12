@@ -2184,6 +2184,7 @@ typedef struct JSON_ResumableParserStruct {
     rvalue_stack value_stack;
     json_frame_stack frames;
     VALUE buffer;
+    bool in_use;
 } JSON_ResumableParser;
 
 static void JSON_ResumableParser_mark(void *ptr)
@@ -2192,7 +2193,7 @@ static void JSON_ResumableParser_mark(void *ptr)
     JSON_ParserConfig_mark(&parser->config);
     rvalue_stack_mark(&parser->value_stack);
     rvalue_cache_mark(&parser->state.name_cache);
-    rb_gc_mark_movable(parser->buffer);
+    rb_gc_mark(parser->buffer); // pin the buffer
 }
 
 static void JSON_ResumableParser_free(void *ptr)
@@ -2333,9 +2334,17 @@ static VALUE json_parse_any_resumable_safe(VALUE _args)
     return (VALUE)json_parse_any(args->state, args->config, true);
 }
 
-static JSON_ResumableParser *ResumableParser_acquire(VALUE self)
+static JSON_ResumableParser *ResumableParser_acquire(VALUE self, bool lock)
 {
     JSON_ResumableParser *parser = cResumableParser_get(self);
+
+    if (lock) {
+        if (parser->in_use) {
+            rb_raise(rb_eArgError, "ResumableParser can't be used recursively");
+        }
+        parser->in_use = true;
+    }
+
     // self may have moved, so we need to update all pointers
     // Investigate: We might be better off keeping JSON_ParserState on the stack
     // and only persist what we need.
@@ -2350,13 +2359,12 @@ static JSON_ResumableParser *ResumableParser_acquire(VALUE self)
 // TODO: doc
 static VALUE cResumableParser_parse(VALUE self)
 {
-    JSON_ResumableParser *parser = ResumableParser_acquire(self);
+    JSON_ResumableParser *parser = ResumableParser_acquire(self, true);
     if (!parser->buffer) {
         return Qfalse;
     }
-    VALUE Vsource = parser->buffer; // Prevent compaction
 
-    // TODO: prevent reentrancy
+    VALUE Vsource = parser->buffer; // Prevent compaction
 
     json_frame *frame = json_frame_stack_peek(&parser->frames);
 
@@ -2374,6 +2382,7 @@ static VALUE cResumableParser_parse(VALUE self)
     };
     int status;
     bool complete = rb_protect(json_parse_any_resumable_safe, (VALUE)&args, &status);
+    parser->in_use = false;
     if (status) {
         complete = false;
         if (RTEST(rb_ivar_get(rb_errinfo(), rb_intern("@eos")))) {
@@ -2389,7 +2398,7 @@ static VALUE cResumableParser_parse(VALUE self)
 // TODO: doc
 static VALUE cResumableParser_value(VALUE self)
 {
-    JSON_ResumableParser *parser = ResumableParser_acquire(self);
+    JSON_ResumableParser *parser = ResumableParser_acquire(self, false);
     json_frame *frame = json_frame_stack_peek(&parser->frames);
 
     if (frame->phase == JSON_PHASE_DONE) {
@@ -2402,7 +2411,7 @@ static VALUE cResumableParser_value(VALUE self)
 // TODO: doc
 static VALUE cResumableParser_partial_value(VALUE self)
 {
-    JSON_ResumableParser *original_parser = ResumableParser_acquire(self);
+    JSON_ResumableParser *original_parser = ResumableParser_acquire(self, false);
     JSON_ResumableParser parser = *original_parser;
 
     if (parser.value_stack.head == 0) {
