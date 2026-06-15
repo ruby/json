@@ -2,6 +2,9 @@
 
 ### Unreleased
 
+* Changed the C parser to no longer be recursive, so parsing very deep documents with `max_nesting: false` will no longer
+  result in `SystemStackError stack level too deep` errors.
+* Added `JSON::ResumableParser` to parse streams of JSON documents. Not yet available on JRuby.
 * Deprecate default support of JavaScript comments in the parser and add `allow_comments: true` parsing option.
 * Integrate with Ruby 4.1 `ruby_sized_xfree`.
 
