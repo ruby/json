@@ -2261,6 +2261,11 @@ static inline JSON_ResumableParser *cResumableParser_get(VALUE self)
  *   parser << ' '
  *   parser.parse # => true
  *   parser.value # => 123
+ *
+ * === Security
+ *
+ * An incomplete document is buffered in full and there is no size limit, so when reading
+ * from an untrusted source the caller is responsible for bounding how much data is fed.
  */
 static VALUE cResumableParser_initialize(int argc, VALUE *argv, VALUE self)
 {
