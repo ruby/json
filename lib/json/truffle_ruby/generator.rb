@@ -111,6 +111,8 @@ module JSON
       # This class is used to create State instances, that are use to hold data
       # while generating a JSON text from a Ruby data structure.
       class State
+        singleton_class.attr_accessor :default_sort_keys_proc # :nodoc:
+
         def self.generate(obj, opts = nil, io = nil)
           new(opts).generate(obj, io)
         end
@@ -164,6 +166,7 @@ module JSON
           @script_safe           = false
           @strict                = false
           @max_nesting           = 100
+          @sort_keys             = false
           configure(opts) if opts
         end
 
@@ -198,6 +201,33 @@ module JSON
         # If this attribute is set to true, attempting to serialize types not
         # supported by the JSON spec will raise a JSON::GeneratorError
         attr_accessor :strict
+
+        # Controls key sorting in the generated JSON. If set to +true+, object
+        # keys are sorted by key lexicographically. If set to a Proc, it
+        # receives the entire Hash and must return a Hash with its pairs in the
+        # desired order.
+        attr_reader :sort_keys
+
+        def sort_keys=(value) # :nodoc:
+          type_error = false
+          @sort_keys = case value
+          when Proc
+            value
+          when true
+            State.default_sort_keys_proc
+          when nil, false
+            false
+          else
+            type_error = true
+            false
+          end
+
+          if type_error
+            raise TypeError, "The `sort_keys` argument must be a boolean or a Proc"
+          end
+
+          @sort_keys
+        end
 
         # :stopdoc:
         attr_reader :buffer_initial_length
@@ -285,6 +315,7 @@ module JSON
           @allow_nan             = !!opts[:allow_nan]         if opts.key?(:allow_nan)
           @as_json               = opts[:as_json].to_proc     if opts[:as_json]
           @ascii_only            = opts[:ascii_only]          if opts.key?(:ascii_only)
+          self.sort_keys         = opts[:sort_keys]           if opts.key?(:sort_keys)
           @depth                 = opts[:depth] || 0
           @buffer_initial_length ||= opts[:buffer_initial_length]
 
@@ -349,9 +380,13 @@ module JSON
 
           depth = @depth
           if @indent.empty? and @space.empty? and @space_before.empty? and @object_nl.empty? and @array_nl.empty? and
-              !@ascii_only and !@script_safe and @max_nesting == 0 and (!@strict || Symbol === obj)
+              !@ascii_only and !@script_safe and @max_nesting == 0 and (!@strict || Symbol === obj) and !@sort_keys
             result = generate_json(obj, ''.dup)
           else
+            if @sort_keys
+              obj = @sort_keys.call(obj)
+            end
+
             result = obj.to_json(self)
           end
           JSON::TruffleRuby::Generator.valid_utf8?(result) or raise GeneratorError.new(

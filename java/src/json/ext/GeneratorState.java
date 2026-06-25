@@ -37,6 +37,8 @@ public class GeneratorState extends RubyObject {
     private boolean allowDuplicateKey = false;
     private boolean deprecateDuplicateKey = true;
 
+    private static IRubyObject defaultSortKeyProc;
+
     /**
      * The indenting unit string. Will be repeated several times for larger
      * indenting levels.
@@ -105,6 +107,13 @@ public class GeneratorState extends RubyObject {
     static final int DEFAULT_BUFFER_INITIAL_LENGTH = 1024;
 
     /**
+     * Controls key sorting when generating JSON. <code>null</code> means keys
+     * are emitted in insertion order; a true value sorts keys lexicographically;
+     * a {@link RubyProc} is used as a comparator receiving two [key, value] pairs.
+     */
+    private IRubyObject sortKeys;
+
+    /**
      * The current depth (inside a #to_json call)
      */
     protected int depth = 0;
@@ -156,6 +165,12 @@ public class GeneratorState extends RubyObject {
         }
 
         return (GeneratorState)klass.newInstance(context, context.nil);
+    }
+
+    @JRubyMethod(meta=true, name="default_sort_keys_proc=")
+    public static IRubyObject setDefaultSortKeyProc(IRubyObject klass, IRubyObject proc) {
+        defaultSortKeyProc = proc;
+        return proc;
     }
 
     /**
@@ -222,6 +237,7 @@ public class GeneratorState extends RubyObject {
 
         this.allowDuplicateKey = orig.allowDuplicateKey;
         this.deprecateDuplicateKey = orig.deprecateDuplicateKey;
+        this.sortKeys = orig.sortKeys;
 
         return this;
     }
@@ -431,6 +447,23 @@ public class GeneratorState extends RubyObject {
         return strict;
     }
 
+    /**
+     * Returns the proc used to sort the keys of an object, or
+     * <code>null</code> if keys should not be sorted. The proc receives the
+     * entire Hash and returns a Hash with its pairs in the desired order.
+     */
+    public RubyProc getSortKeysProc() {
+        return sortKeys instanceof RubyProc ? (RubyProc) sortKeys : null;
+    }
+
+    private static IRubyObject normalizeSortKeys(ThreadContext context, IRubyObject value) {
+        if (value instanceof RubyProc) return value;
+        if (value != null && value.isTrue()) {
+            return defaultSortKeyProc;
+        }
+        return null;
+    }
+
     @JRubyMethod(name={"strict","strict?"})
     public RubyBoolean strict_get(ThreadContext context) {
         return RubyBoolean.newBoolean(context, strict);
@@ -472,6 +505,18 @@ public class GeneratorState extends RubyObject {
         int newLength = RubyNumeric.fix2int(buffer_initial_length);
         if (newLength > 0) bufferInitialLength = newLength;
         return buffer_initial_length;
+    }
+
+    @JRubyMethod(name="sort_keys")
+    public IRubyObject sort_keys_get(ThreadContext context) {
+        return sortKeys == null ? context.getRuntime().getFalse() : sortKeys;
+    }
+
+    @JRubyMethod(name="sort_keys=")
+    public IRubyObject sort_keys_set(ThreadContext context, IRubyObject sortKeys) {
+        checkFrozen();
+        this.sortKeys = normalizeSortKeys(context, sortKeys);
+        return sortKeys;
     }
 
     public int getDepth() {
@@ -568,6 +613,9 @@ public class GeneratorState extends RubyObject {
             this.allowDuplicateKey = opts.getBool("allow_duplicate_key", false);
             this.deprecateDuplicateKey = false;
         }
+
+        sortKeys = normalizeSortKeys(context, opts.get("sort_keys"));
+
         return this;
     }
 
@@ -596,6 +644,7 @@ public class GeneratorState extends RubyObject {
         result.op_aset(context, runtime.newSymbol("strict"), strict_get(context));
         result.op_aset(context, runtime.newSymbol("depth"), depth_get(context));
         result.op_aset(context, runtime.newSymbol("buffer_initial_length"), buffer_initial_length_get(context));
+        result.op_aset(context, runtime.newSymbol("sort_keys"), sort_keys_get(context));
 
         if (this.allowDuplicateKey) {
             if (!this.deprecateDuplicateKey) {

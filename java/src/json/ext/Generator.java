@@ -17,6 +17,7 @@ import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
 import org.jruby.RubyHash;
 import org.jruby.RubyIO;
+import org.jruby.RubyProc;
 import org.jruby.RubyString;
 import org.jruby.RubySymbol;
 import org.jruby.runtime.Helpers;
@@ -571,6 +572,11 @@ public final class Generator {
             buffer.write(EMPTY_HASH_BYTES);
             state.decreaseDepth();
             return;
+        }
+
+        RubyProc sortKeysProc = state.getSortKeysProc();
+        if (sortKeysProc != null) {
+            object = (RubyHash) Helpers.invoke(context, sortKeysProc, "call", object);
         }
 
         final ByteList objectNl = state.getObjectNl();
