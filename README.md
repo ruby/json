@@ -85,7 +85,7 @@ Both of these behavior can be disabled using the `strict: true` option:
 
 ```ruby
 JSON.generate(Object.new, strict: true) # => Object not allowed in JSON (JSON::GeneratorError)
-JSON.generate(Position.new(1, 2)) # => Position not allowed in JSON (JSON::GeneratorError)
+JSON.generate(Position.new(1, 2), strict: true) # => Position not allowed in JSON (JSON::GeneratorError)
 ```
 
 ## JSON::Coder
@@ -117,13 +117,13 @@ It is also called for objects that do have a JSON equivalent, but are used as Ha
 as well as for strings that aren't valid UTF-8:
 
 ```ruby
-coder = JSON::Combining.new do |object, is_object_key|
+coder = JSON::Coder.new do |object, is_object_key|
   case object
   when String
-    if !string.valid_encoding? || string.encoding != Encoding::UTF_8
-      Base64.encode64(string)
+    if !object.valid_encoding? || object.encoding != Encoding::UTF_8
+      Base64.encode64(object)
     else
-      string
+      object
     end
   else
     object
