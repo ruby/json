@@ -68,6 +68,15 @@ public class Parser extends RubyObject {
     private static final String CONST_INFINITY = "Infinity";
     private static final String CONST_MINUS_INFINITY = "MinusInfinity";
 
+    private static final String VALIDATE_UTF8_STRINGS = "jruby.json.validateUTF8Strings";
+    private static final String VALIDATE_UTF8_STRINGS_DEFAULT = "true";
+    private static final boolean validateUTF8Strings;
+
+    static {
+        String enable = System.getProperty(VALIDATE_UTF8_STRINGS, VALIDATE_UTF8_STRINGS_DEFAULT);
+        validateUTF8Strings = "true".equalsIgnoreCase(enable) || "1".equals(enable);
+    }
+
     static final ObjectAllocator ALLOCATOR = Parser::new;
 
     public Parser(Ruby runtime, RubyClass metaClass) {
@@ -681,12 +690,7 @@ public class Parser extends RubyObject {
             final byte[] data = this.data;
             final int contentStart = cursor + 1; // skip opening quote
 
-            // The scanner finds the closing quote and reports whether the body
-            // is plain printable ASCII (no escape, no ASCII control character,
-            // no non-ASCII byte). Anything non-plain is handed to StringDecoder,
-            // which performs the UTF-8/control validation, escape expansion, and
-            // error reporting.
-            long scanned = scanner.scan(data, chunks, contentStart, end);
+            long scanned = scanner.scan(data, chunks, contentStart, end, validateUTF8Strings);
             final int q = (int) scanned;
             if (q < 0) {
                 throw newException(Utils.M_PARSER_ERROR,
@@ -694,6 +698,8 @@ public class Parser extends RubyObject {
             }
 
             boolean plain = (scanned & StringScanner.PLAIN_BIT) != 0;
+            boolean isAscii = (scanned & StringScanner.ASCII_BIT) != 0;
+
             cursor = q + 1; // past closing quote
 
             // Note: When running multiple read-world benchmarks in the same JVM,
@@ -713,8 +719,7 @@ public class Parser extends RubyObject {
                     off = contentStart;
                     len = q - contentStart;
                 } else {
-                    ByteList decoded = decoder.decode(context, byteList,
-                                                      contentStart - begin, q - begin);
+                    ByteList decoded = decodeString(context, byteList, contentStart - begin, q - begin, isAscii);
                     buf = decoded.getUnsafeBytes();
                     off = decoded.begin();
                     len = decoded.realSize();
@@ -731,8 +736,7 @@ public class Parser extends RubyObject {
                 string = RubyString.newString(context.runtime, data, contentStart,
                                               q - contentStart, UTF8Encoding.INSTANCE);
             } else {
-                ByteList content = decoder.decode(context, byteList,
-                                                  contentStart - begin, q - begin);
+                ByteList content = decodeString(context, byteList, contentStart - begin, q - begin, isAscii);
                 string = context.runtime.newString(content);
                 string.setEncoding(UTF8Encoding.INSTANCE);
                 string.clearCodeRange();
@@ -743,6 +747,16 @@ public class Parser extends RubyObject {
             }
 
             return string;
+        }
+
+        private ByteList decodeString(ThreadContext context, ByteList byteList, int start, int end, boolean isAscii) {
+            if (isAscii) {
+                return decoder.decodeNoValidate(context, byteList, start, end, chunks);
+            }
+            if (!validateUTF8Strings) {
+                return decoder.decodeNoValidate(context, byteList, start, end, chunks);
+            }
+            return decoder.decode(context, byteList, start, end);
         }
 
         private static boolean isLetter(byte b) {
