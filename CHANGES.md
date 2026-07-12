@@ -2,6 +2,14 @@
 
 ### Unreleased
 
+### 2026-07-12 (2.21.0)
+
+* `JSON.generate` now accept a `sort_keys` option, which takes either a boolean or a block.
+* Added `#empty?` and `#partial_value?` methods on `JSON::ResumableParser`.
+* Numerous correctness and performance fixes for `JSON::ResumableParser`.
+* Avoid triggering Ruby's `float out of range` warning when parsing out of range numbers.
+* Declare C types with Ruby 4.1 `RUBY_TYPED_THREAD_SAFE_FREE`.
+
 ### 2026-06-23 (2.20.0)
 
 * Both C and Java parsers are no longer recursive, so parsing very deep documents with `max_nesting: false` will no longer
