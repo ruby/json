@@ -17,7 +17,7 @@ have_func("ruby_xfree_sized", "ruby.h") # RUBY_VERSION >= 4.1
 
 def have_builtin_func(name, check_expr, opt = "", &b)
   checking_for checking_message(name.funcall_style, nil, opt) do
-    if try_compile(<<SRC, opt, &b)
+    if try_link(<<SRC, opt, &b)
 int foo;
 int main() { #{check_expr}; return 0; }
 SRC
