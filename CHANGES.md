@@ -2,6 +2,10 @@
 
 ### Unreleased
 
+### 2026-07-13 (2.21.1)
+
+* Fix a compilation issue on Window and Microsoft Visual C++.
+
 ### 2026-07-12 (2.21.0)
 
 * `JSON.generate` now accept a `sort_keys` option, which takes either a boolean or a block.
