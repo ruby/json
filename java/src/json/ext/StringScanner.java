@@ -16,6 +16,8 @@ import java.nio.ByteBuffer;
 class StringScanner {
     /** Set in the returned bits when the whole body is plain printable ASCII. */
     static final long PLAIN_BIT = 1L << 32;
+    static final long ASCII_BIT = 1L << 33;
+
     /** Returned when no closing quote is found before {@code end}. */
     static final long NOT_FOUND = -1L;
 
@@ -41,8 +43,6 @@ class StringScanner {
                     .loadClass(VECTORIZED_SCANNER_CLASS);
                 scanner = (StringScanner) vectorized.getDeclaredConstructor().newInstance();
             } catch (Throwable t) {
-                // jdk.incubator.vector unavailable (or any load failure):
-                // keep the SWAR implementation.
                 scanner = new StringScanner();
             }
         }
@@ -54,31 +54,52 @@ class StringScanner {
     }
 
     /**
-     * Scans {@code data[start..end)} for the closing quote, honouring backslash 
-     * escapes.
+     * Scans {@code data[start..end)} for a closing quote. This method will
+     * also report if there are any interesting bytes within the range 
+     * {@link data[start..end)}. An interestin byte is defined as control
+     * characters, backslashes or bytes with the high bit set.
      *
-     * @param chunks a little-endian {@link ByteBuffer} over {@code data}, used
-     *               for the 8-byte SWAR reads (the vectorized subclass reads
-     *               {@code data} directly and ignores it).
+     * @param chunks a little-endian {@link ByteBuffer} over {@code data}
+     *
      * @return packed result: the low 32 bits hold the index of the closing
      *         quote, or {@code -1} ({@link #NOT_FOUND}) when none is found
      *         before {@code end}; {@link #PLAIN_BIT} is set when the entire body
      *         is plain printable ASCII (no escape, no ASCII control character,
-     *         and no non-ASCII byte) and can be copied verbatim.
+     *         and no non-ASCII byte) and can be copied verbatim;
+     *         {@link #ASCII_BIT} is set when the body contains no non-ASCII byte
+     *         (it may still hold escapes or control characters)
      */
-    long scan(byte[] data, ByteBuffer chunks, int start, int end) {
+    long scan(byte[] data, ByteBuffer chunks, int start, int end, boolean validateUtf8) {
         int p = start;
         boolean plain = true;
+        boolean ascii = true;
 
         outer:
         while (true) {
-            // SWAR: skip 8-byte chunks that contain nothing interesting.
             while (p + 8 <= end) {
                 long x = chunks.getLong(p);
-                // Due to the byte-by-byte handling if we match an interesting byte,
-                // if we already know this is a non-ASCII-only string, we simply
-                // look for quotes and backslashes.
-                long m = plain ? stringScanMask(x) : quoteBackslashMask(x);
+                // Pick the cheapest mask that still observes every transition we
+                // still care about:
+                //   plain             -> control, quote, backslash and high bytes
+                //   non-plain, ASCII  -> quote, backslash and high bytes, so the
+                //                        first non-ASCII byte still stops us and
+                //                        clears ASCII_BIT
+                //   non-plain, !ASCII -> quote and backslash only; multi-byte
+                //                        UTF-8 is skipped eight bytes at a time
+                //
+                // When UTF-8 validation is disabled, non-ASCII bytes are copied
+                // verbatim, so they stay on the plain fast path and the high-bit
+                // term drops out of every mask: plain scans for control, quote
+                // and backslash; non-plain scans for quote and backslash only.
+                long m;
+                if (validateUtf8) {
+                    m = plain ? stringScanMask(x)
+                             : ascii ? quoteBackslashHighMask(x)
+                                     : quoteBackslashMask(x);
+                } else {
+                    m = plain ? controlQuoteBackslashMask(x)
+                             : quoteBackslashMask(x);
+                }
                 if (m == 0) {
                     p += 8;
                 } else {
@@ -90,15 +111,23 @@ class StringScanner {
             while (p < end) {
                 int b = data[p] & 0xFF;
                 if (b == '"') {
-                    return ((long) p) | (plain ? PLAIN_BIT : 0L);
+                    return (((long) p) | (plain ? PLAIN_BIT : 0L) | (ascii ? ASCII_BIT : 0L));
                 }
                 if (b == '\\') {
                     plain = false;
                     p += 2; // skip the backslash and the escaped byte
                     continue outer;
                 }
-                if (b < 0x20 || b >= 0x80) {
+                if (b < 0x20) {
                     plain = false;
+                    p++;
+                    continue outer;
+                }
+                if (b >= 0x80) {
+                    ascii = false;
+                    if (validateUtf8) {
+                        plain = false;
+                    }
                     p++;
                     continue outer;
                 }
@@ -106,6 +135,37 @@ class StringScanner {
             }
             return NOT_FOUND;
         }
+    }
+
+
+    /**
+     * Scans {@code data[start..end)} for the next backslash or control character.
+     *
+     * <p>The caller must guarantee the {@link data[start..end]} contains
+     * no non-ASCII bytes that need to be decoded.</p>
+     *
+     * @return the index of the first backslash or control byte, or {@code end}
+     *         when none is found.
+     */
+    int scanEscape(byte[] data, ByteBuffer chunks, int start, int end) {
+        int p = start;
+        while (p + 8 <= end) {
+            long x = chunks.getLong(p);
+            long m = backslashControlMask(x);
+            if (m == 0) {
+                p += 8;
+            } else {
+                return p + (Long.numberOfTrailingZeros(m) >>> 3);
+            }
+        }
+        while (p < end) {
+            int b = data[p] & 0xFF;
+            if (b == '\\' || b < 0x20) {
+                return p;
+            }
+            p++;
+        }
+        return end;
     }
 
     /**
@@ -125,10 +185,38 @@ class StringScanner {
     }
 
     /**
+     * Like {@link #quoteBackslashMask} but for the ASCII-only decode fast path:
+     * flags backslashes and ASCII control characters (&lt; 0x20). The control
+     * test relies on every byte being ASCII (&lt; 0x80), which the caller
+     * guarantees, so no high-bit cleanup is needed.
+     */
+    private static long backslashControlMask(long x) {
+        long control = (x - SPACES) & ~x; // bytes < 0x20 (ASCII)
+        long s       = x ^ BACKSLASHES;
+        long bslash  = (s - ONES) & ~s;
+        return (control | bslash) & HIGH_BITS;
+    }
+
+    /**
+     * Like {@link #stringScanMask} but omits the non-ASCII (high-bit) term:
+     * flags double quotes, backslashes and ASCII control characters (&lt; 0x20)
+     * only. Used as the starting mask when UTF-8 validation is disabled, where
+     * non-ASCII bytes are copied verbatim and so stay on the plain fast path.
+     */
+    private static long controlQuoteBackslashMask(long x) {
+        long control = (x - SPACES) & ~x; // bytes < 0x20 (ASCII)
+        long q       = x ^ DOUBLE_QUOTES;
+        long quote   = (q - ONES) & ~q;
+        long s       = x ^ BACKSLASHES;
+        long bslash  = (s - ONES) & ~s;
+        return (control | quote | bslash) & HIGH_BITS;
+    }
+
+    /**
      * Like {@link #stringScanMask} but only flags double quotes and backslashes.
-     * Used once a string is known to require the decoder, so the remaining scan
-     * for the closing quote still skips clean chunks (including multi-byte
-     * UTF-8) eight bytes at a time.
+     * Used once a string is known to require the decoder <em>and</em> to already
+     * contain non-ASCII bytes, so the remaining scan for the closing quote skips
+     * clean chunks (including multi-byte UTF-8) eight bytes at a time.
      */
     private static long quoteBackslashMask(long x) {
         long q      = x ^ DOUBLE_QUOTES;
@@ -136,5 +224,20 @@ class StringScanner {
         long s      = x ^ BACKSLASHES;
         long bslash = (s - ONES) & ~s;
         return (quote | bslash) & HIGH_BITS;
+    }
+
+    /**
+     * Like {@link #quoteBackslashMask} but also flags non-ASCII bytes. Used once
+     * a string is known to require the decoder but is still ASCII-only, so the
+     * scan keeps skipping printable runs eight bytes at a time yet still stops on
+     * the first high byte and clears {@link #ASCII_BIT}.
+     */
+    private static long quoteBackslashHighMask(long x) {
+        long high   = x;                 // bit 0x80 set iff non-ASCII
+        long q      = x ^ DOUBLE_QUOTES;
+        long quote  = (q - ONES) & ~q;
+        long s      = x ^ BACKSLASHES;
+        long bslash = (s - ONES) & ~s;
+        return (high | quote | bslash) & HIGH_BITS;
     }
 }
