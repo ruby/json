@@ -21,7 +21,7 @@ else
 end
 
 def benchmark_parsing(name, json_output)
-  puts "== Parsing #{name} (#{json_output.size} bytes)"
+  puts "== Parsing #{name} (#{json_output.bytesize} bytes)"
   coder = JSON::Coder.new
 
   Benchmark.ips do |x|
