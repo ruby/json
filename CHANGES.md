@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* Remove `Kernel#j` and `Kernel#jj`
+
 ### 2026-07-31 (2.21.2)
 
 * Fix a use-after-free bug in `JSON::ResumableParser`. [GHSA-9hj4-r449-hfvc][CVE-2026-71847].
