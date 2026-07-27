@@ -167,6 +167,7 @@ module JSON
           @strict                = false
           @max_nesting           = 100
           @sort_keys             = false
+          @allow_duplicate_key   = false
           configure(opts) if opts
         end
 
@@ -318,6 +319,7 @@ module JSON
           self.sort_keys         = opts[:sort_keys]           if opts.key?(:sort_keys)
           @depth                 = opts[:depth] || 0
           @buffer_initial_length ||= opts[:buffer_initial_length]
+          @allow_duplicate_key   = !!opts[:allow_duplicate_key]
 
           @script_safe = if opts.key?(:script_safe)
             !!opts[:script_safe]
@@ -325,12 +327,6 @@ module JSON
             !!opts[:escape_slash]
           else
             false
-          end
-
-          if opts.key?(:allow_duplicate_key)
-            @allow_duplicate_key = !!opts[:allow_duplicate_key]
-          else
-            @allow_duplicate_key = nil # nil is deprecation
           end
 
           @strict                = !!opts[:strict] if opts.key?(:strict)
@@ -360,10 +356,6 @@ module JSON
           instance_variables.each do |iv|
             key = iv.to_s[1..-1]
             result[key.to_sym] = instance_variable_get(iv)
-          end
-
-          if result[:allow_duplicate_key].nil?
-            result.delete(:allow_duplicate_key)
           end
 
           result
@@ -416,7 +408,7 @@ module JSON
               else
                 if key_type && !@allow_duplicate_key && key_type != k.class
                   key_type = nil # stop checking
-                  JSON.send(:on_mixed_keys_hash, obj, !@allow_duplicate_key.nil?)
+                  JSON.send(:on_mixed_keys_hash, obj)
                 end
                 buf << ','
               end
@@ -569,7 +561,7 @@ module JSON
               else
                 if key_type && !state.allow_duplicate_key? && key_type != key.class
                   key_type = nil # stop checking
-                  JSON.send(:on_mixed_keys_hash, self, state.allow_duplicate_key? == false)
+                  JSON.send(:on_mixed_keys_hash, self)
                 end
                 result << delim
               end

@@ -553,13 +553,8 @@ public final class Generator {
             final GeneratorState state = session.getState(context);
 
             if (!state.getAllowDuplicateKey()) {
-                if (state.getDeprecateDuplicateKey()) {
-                    IRubyObject args[] = new IRubyObject[]{hash, context.getRuntime().getFalse()};
-                    info.jsonModule.get().callMethod(context, "on_mixed_keys_hash", args);
-                } else {
-                    IRubyObject args[] = new IRubyObject[]{hash, context.getRuntime().getTrue()};
-                    info.jsonModule.get().callMethod(context, "on_mixed_keys_hash", args);
-                }
+                IRubyObject args[] = new IRubyObject[]{hash};
+                info.jsonModule.get().callMethod(context, "on_mixed_keys_hash", args);
             }
         }
     }
