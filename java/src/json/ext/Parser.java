@@ -46,7 +46,6 @@ public class Parser extends RubyObject {
     private boolean allowNaN;
     private boolean allowTrailingComma;
     private boolean allowComments;
-    private boolean deprecateComments;
     private boolean allowControlCharacters;
     private boolean allowInvalidEscape;
     private boolean allowDuplicateKey;
@@ -96,14 +95,7 @@ public class Parser extends RubyObject {
         OptionsReader opts   = new OptionsReader(context, options);
         this.maxNesting      = opts.getInt("max_nesting", DEFAULT_MAX_NESTING);
         this.allowNaN        = opts.getBool("allow_nan", false);
-        if (opts.hasKey("allow_comments")) {
-            this.allowComments = opts.getBool("allow_comments", false);
-            this.deprecateComments = false;
-        } else {
-            this.allowComments = true;
-            this.deprecateComments = true;
-        }
-
+        this.allowComments = opts.getBool("allow_comments", false);
         this.allowControlCharacters = opts.getBool("allow_control_characters", false);
         this.allowInvalidEscape = opts.getBool("allow_invalid_escape", false);
         this.allowTrailingComma = opts.getBool("allow_trailing_comma", false);
@@ -843,15 +835,7 @@ public class Parser extends RubyObject {
 
         private void eatComments() {
             if (!config.allowComments) {
-                if (config.deprecateComments) {
-                    if (emittedDeprecations < MAX_DEPRECATIONS) {
-                        emittedDeprecations++;
-                        context.runtime.getWarnings().warning(
-                            "Encountered comment in JSON. This will raise an error in json 3.0 unless enabled via `allow_comments: true`");
-                    }
-                } else {
-                    throw unexpectedToken(cursor, end);
-                }
+                throw unexpectedToken(cursor, end);
             }
 
             int start = cursor;
