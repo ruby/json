@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+* The `allow_comments` parsing option now default to `false`.
 * The `allow_duplicate_key` option now defaults to `false`, for both parsing and generating JSON.
 * Remove `Kernel#j` and `Kernel#jj`
 
