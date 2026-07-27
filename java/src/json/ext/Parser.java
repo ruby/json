@@ -50,7 +50,6 @@ public class Parser extends RubyObject {
     private boolean allowControlCharacters;
     private boolean allowInvalidEscape;
     private boolean allowDuplicateKey;
-    private boolean deprecateDuplicateKey;
     private boolean symbolizeNames;
     private boolean freeze;
     private RubyProc onLoadProc;
@@ -109,13 +108,7 @@ public class Parser extends RubyObject {
         this.allowInvalidEscape = opts.getBool("allow_invalid_escape", false);
         this.allowTrailingComma = opts.getBool("allow_trailing_comma", false);
         this.symbolizeNames  = opts.getBool("symbolize_names", false);
-        if (opts.hasKey("allow_duplicate_key")) {
-            this.allowDuplicateKey = opts.getBool("allow_duplicate_key", false);
-            this.deprecateDuplicateKey = false;
-        } else {
-            this.allowDuplicateKey = false;
-            this.deprecateDuplicateKey = true;
-        }
+        this.allowDuplicateKey = opts.getBool("allow_duplicate_key", false);
 
         this.freeze          = opts.getBool("freeze", false);
         this.onLoadProc      = opts.getProc("on_load");
@@ -585,16 +578,7 @@ public class Parser extends RubyObject {
             // match the C parser's message.
             String keyInspect = key.callMethod(context, "to_s")
                                    .callMethod(context, "inspect").asJavaString();
-            if (config.deprecateDuplicateKey) {
-                if (emittedDeprecations < MAX_DEPRECATIONS) {
-                    emittedDeprecations++;
-                    context.runtime.getWarnings().warning(
-                        "detected duplicate key " + keyInspect + " in JSON object. " +
-                        "This will raise an error in json 3.0 unless enabled via `allow_duplicate_key: true`");
-                }
-            } else {
-                throw newException(Utils.M_PARSER_ERROR, "duplicate key " + keyInspect);
-            }
+            throw newException(Utils.M_PARSER_ERROR, "duplicate key " + keyInspect);
         }
 
         private int parseDigits(long value) {

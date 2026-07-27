@@ -35,7 +35,6 @@ import org.jruby.util.TypeConverter;
  */
 public class GeneratorState extends RubyObject {
     private boolean allowDuplicateKey = false;
-    private boolean deprecateDuplicateKey = true;
 
     private static IRubyObject defaultSortKeyProc;
 
@@ -236,7 +235,6 @@ public class GeneratorState extends RubyObject {
         this.depth = orig.depth;
 
         this.allowDuplicateKey = orig.allowDuplicateKey;
-        this.deprecateDuplicateKey = orig.deprecateDuplicateKey;
         this.sortKeys = orig.sortKeys;
 
         return this;
@@ -550,18 +548,12 @@ public class GeneratorState extends RubyObject {
     public IRubyObject allow_duplicate_key_p(ThreadContext context) {
         if (allowDuplicateKey) {
             return context.runtime.getTrue();
-        } else if (deprecateDuplicateKey) {
-            return context.runtime.getNil();
         }
         return context.runtime.getFalse();
     }
 
     public boolean getAllowDuplicateKey() {
         return allowDuplicateKey;
-    }
-
-    public boolean getDeprecateDuplicateKey() {
-        return deprecateDuplicateKey;
     }
 
     /**
@@ -608,11 +600,7 @@ public class GeneratorState extends RubyObject {
         if (depth < 0) {
             throw context.runtime.newArgumentError("depth must be >= 0 (got: " + depth + ")");
         }
-
-        if (opts.hasKey("allow_duplicate_key")) {
-            this.allowDuplicateKey = opts.getBool("allow_duplicate_key", false);
-            this.deprecateDuplicateKey = false;
-        }
+        this.allowDuplicateKey = opts.getBool("allow_duplicate_key", false);
 
         sortKeys = normalizeSortKeys(context, opts.get("sort_keys"));
 
@@ -645,15 +633,7 @@ public class GeneratorState extends RubyObject {
         result.op_aset(context, runtime.newSymbol("depth"), depth_get(context));
         result.op_aset(context, runtime.newSymbol("buffer_initial_length"), buffer_initial_length_get(context));
         result.op_aset(context, runtime.newSymbol("sort_keys"), sort_keys_get(context));
-
-        if (this.allowDuplicateKey) {
-            if (!this.deprecateDuplicateKey) {
-                result.op_aset(context, runtime.newSymbol("allow_duplicate_key"), runtime.getTrue());
-            }
-        }
-        else {
-            result.op_aset(context, runtime.newSymbol("allow_duplicate_key"), runtime.getFalse());
-        }
+        result.op_aset(context, runtime.newSymbol("allow_duplicate_key"), allow_duplicate_key_p(context));
 
         for (String name: getInstanceVariableNameList()) {
             result.op_aset(context, runtime.newSymbol(name.substring(1)), getInstanceVariables().getInstanceVariable(name));

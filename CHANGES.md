@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+* The `allow_duplicate_key` option now defaults to `false`, for both parsing and generating JSON.
 * Remove `Kernel#j` and `Kernel#jj`
 
 ### 2026-07-31 (2.21.2)
