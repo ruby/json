@@ -10,6 +10,7 @@
 * Removed `JSON.dump_default_options`.
 * Removed `JSON::State#[]` and `JSON::State#[]=`.
 * Removed `JSON.unparse`.
+* Removed `JSON.fast_generate`.
 * Removed `JSON.fast_unparse`.
 * Removed `JSON.pretty_unparse`.
 * Removed `JSON.restore`.
