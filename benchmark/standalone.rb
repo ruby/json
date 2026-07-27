@@ -32,7 +32,7 @@ Benchmark.ips do |x|
       JSON.dump(obj)
     end
   else
-    x.report('JSON.load(str)') do # max_nesting: false, allow_nan: true, allow_blank: true, create_additions: true
+    x.report('JSON.load(str)') do # max_nesting: false, allow_nan: true, allow_blank: true
       JSON.load(str)
     end
   end

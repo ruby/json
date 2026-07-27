@@ -14,6 +14,7 @@
 * Removed `JSON.pretty_unparse`.
 * Removed `JSON.restore`.
 * Removed `JSON::PRETTY_STATE_PROTOTYPE`.
+* Removed the insecure `create_additions` option.
 
 ### 2026-07-31 (2.21.2)
 
