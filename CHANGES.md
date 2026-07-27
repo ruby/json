@@ -13,6 +13,7 @@
 * Removed `JSON.fast_unparse`.
 * Removed `JSON.pretty_unparse`.
 * Removed `JSON.restore`.
+* Removed `JSON::PRETTY_STATE_PROTOTYPE`.
 
 ### 2026-07-31 (2.21.2)
 
