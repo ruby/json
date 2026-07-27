@@ -270,30 +270,6 @@ public class GeneratorState extends RubyObject {
         return generate(context, obj, context.nil);
     }
 
-    @JRubyMethod(name="[]")
-    public IRubyObject op_aref(ThreadContext context, IRubyObject vName) {
-        String name = vName.asJavaString();
-        if (getMetaClass().isMethodBound(name, true)) {
-            return send(context, vName, Block.NULL_BLOCK);
-        } else {
-            IRubyObject value = getInstanceVariables().getInstanceVariable("@" + name);
-            return value == null ? context.nil : value;
-        }
-    }
-
-    @JRubyMethod(name="[]=")
-    public IRubyObject op_aset(ThreadContext context, IRubyObject vName, IRubyObject value) {
-        checkFrozen();
-        String name = vName.asJavaString();
-        String nameWriter = name + "=";
-        if (getMetaClass().isMethodBound(nameWriter, true)) {
-            return send(context, context.runtime.newString(nameWriter), value, Block.NULL_BLOCK);
-        } else {
-            getInstanceVariables().setInstanceVariable("@" + name, value);
-        }
-        return context.nil;
-    }
-
     public ByteList getIndent() {
         return indent;
     }
