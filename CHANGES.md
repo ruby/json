@@ -2,6 +2,10 @@
 
 ### Unreleased
 
+### 2026-07-31 (2.21.2)
+
+* Fix a use-after-free bug in `JSON::ResumableParser`. [GHSA-9hj4-r449-hfvc].
+
 ### 2026-07-13 (2.21.1)
 
 * Fix a compilation issue on Window and Microsoft Visual C++.
