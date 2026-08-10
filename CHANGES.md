@@ -4,6 +4,7 @@
 
 * The `allow_comments` parsing option now default to `false`.
 * The `allow_duplicate_key` option now defaults to `false`, for both parsing and generating JSON.
+* Removed the `limit` positional argument of `JSON.dump`.
 * Removed the `escape_slash` alias of `script_safe`.
 * Removed `Kernel#j` and `Kernel#jj`.
 * Removed `JSON.load_default_options`.
