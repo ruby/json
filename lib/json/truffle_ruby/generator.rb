@@ -168,7 +168,7 @@ module JSON
           @max_nesting           = 100
           @sort_keys             = false
           @allow_duplicate_key   = false
-          configure(opts) if opts
+          _configure(**opts) if opts
         end
 
         # This string is used to indent levels in the JSON text.
@@ -290,58 +290,48 @@ module JSON
 
         # Configure this State instance with the Hash _opts_, and return
         # itself.
-        def configure(opts)
-          if opts.respond_to?(:to_hash)
-            opts = opts.to_hash
-          elsif opts.respond_to?(:to_h)
-            opts = opts.to_h
-          else
-            raise TypeError, "can't convert #{opts.class} into Hash"
-          end
-
-          if opts[:depth]&.negative?
-            raise ArgumentError, "depth must be >= 0 (got #{opts[:depth]})"
-          end
-
-          opts.each do |key, value|
-            instance_variable_set "@#{key}", value
-          end
-
-          # NOTE: If adding new instance variables here, check whether #generate should check them for #generate_json
-          @indent                = opts[:indent]        || '' if opts.key?(:indent)
-          @space                 = opts[:space]         || '' if opts.key?(:space)
-          @space_before          = opts[:space_before]  || '' if opts.key?(:space_before)
-          @object_nl             = opts[:object_nl]     || '' if opts.key?(:object_nl)
-          @array_nl              = opts[:array_nl]      || '' if opts.key?(:array_nl)
-          @allow_nan             = !!opts[:allow_nan]         if opts.key?(:allow_nan)
-          @as_json               = opts[:as_json].to_proc     if opts[:as_json]
-          @ascii_only            = opts[:ascii_only]          if opts.key?(:ascii_only)
-          self.sort_keys         = opts[:sort_keys]           if opts.key?(:sort_keys)
-          @depth                 = opts[:depth] || 0
-          @buffer_initial_length ||= opts[:buffer_initial_length]
-          @allow_duplicate_key   = !!opts[:allow_duplicate_key]
-
-          @script_safe = if opts.key?(:script_safe)
-            !!opts[:script_safe]
-          else
-            false
-          end
-
-          @strict                = !!opts[:strict] if opts.key?(:strict)
-
-          if !opts.key?(:max_nesting) # defaults to 100
-            @max_nesting = 100
-          elsif opts[:max_nesting]
-            unless opts[:max_nesting].is_a?(Integer)
-              raise TypeError, ":max_nesting must be an Integer, got: #{opts[:max_nesting].class}"
+        def configure(options)
+          unless Hash == options
+            if options.respond_to?(:to_hash)
+              options = options.to_hash
+            elsif options.respond_to?(:to_h)
+              options = options.to_h
             end
-            @max_nesting = opts[:max_nesting]
-          else
-            @max_nesting = 0
           end
-          self
+          _configure(**options)
         end
         alias merge configure
+
+        private def _configure(
+          indent: '', space: '', space_before: '', object_nl: '', array_nl: '', allow_nan: false,
+          as_json: false, ascii_only: false, sort_keys: false, depth: 0, buffer_initial_length: 1024,
+          allow_duplicate_key: false, script_safe: false, strict: false, max_nesting: 100
+        )
+          if depth.negative?
+            raise ArgumentError, "depth must be >= 0 (got #{depth})"
+          end
+
+          if max_nesting && !(Integer === max_nesting)
+            raise TypeError, ":max_nesting must be `false` or an Integer, got: #{max_nesting.class}"
+          end
+
+          @indent = indent || ''
+          @space = space || ''
+          @space_before = space_before || ''
+          @object_nl = object_nl || ''
+          @array_nl = array_nl || ''
+          @allow_nan = allow_nan || false
+          @as_json = as_json || false
+          @ascii_only = ascii_only || false
+          self.sort_keys = sort_keys
+          @depth = depth
+          @buffer_initial_length = buffer_initial_length
+          @allow_duplicate_key = allow_duplicate_key
+          @script_safe = script_safe
+          @strict = strict
+          @max_nesting = max_nesting || 0
+          self
+        end
 
         def allow_duplicate_key? # :nodoc:
           @allow_duplicate_key

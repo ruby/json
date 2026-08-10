@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+* All all unknown options are now cause an `ArgumentError` rather than to be ignored.
 * The `allow_comments` parsing option now default to `false`.
 * The `allow_duplicate_key` option now defaults to `false`, for both parsing and generating JSON.
 * Removed the `limit` positional argument of `JSON.dump`.

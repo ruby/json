@@ -577,6 +577,8 @@ public class GeneratorState extends RubyObject {
 
         sortKeys = normalizeSortKeys(context, opts.get("sort_keys"));
 
+        opts.ensureEmpty();
+
         return this;
     }
 
