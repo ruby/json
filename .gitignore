@@ -3,6 +3,7 @@
 *.bundle.dSYM
 *.so
 coverage
+.coverage
 tags
 pkg
 .nfs.*
