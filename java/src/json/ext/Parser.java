@@ -115,6 +115,8 @@ public class Parser extends RubyObject {
             this.decimalFactory = this::createCustomDecimal;
         }
 
+        opts.ensureEmpty();
+
         return this;
     }
 

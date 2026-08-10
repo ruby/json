@@ -26,21 +26,38 @@ final class OptionsReader {
     OptionsReader(ThreadContext context, IRubyObject vOpts) {
         this.context = context;
         this.runtime = context.runtime;
+
+        RubyHash options;
         if (vOpts == null || vOpts.isNil()) {
-            opts = null;
+            options = null;
         } else if (vOpts.respondsTo("to_hash")) {
-            opts = vOpts.convertToHash();
+            options = vOpts.convertToHash();
         } else if (vOpts.respondsTo("to_h")) {
-            opts = vOpts.callMethod(context, "to_h").convertToHash();
+            options = vOpts.callMethod(context, "to_h").convertToHash();
         } else {
-            opts = vOpts.convertToHash(); /* Should just raise the correct TypeError */
+            options = vOpts.convertToHash(); /* Should just raise the correct TypeError */
         }
+
+        this.opts = options == null ? null : (RubyHash)options.dup();
     }
 
     private RuntimeInfo getRuntimeInfo() {
         if (info != null) return info;
         info = RuntimeInfo.forRuntime(runtime);
         return info;
+    }
+
+
+    void ensureEmpty() {
+        if (opts == null) return;
+
+        if (opts.size() == 1) {
+            throw context.runtime.newArgumentError("unknown keyword: " + opts.keys().first());
+        }
+
+        if (opts.size() > 1) {
+            throw context.runtime.newArgumentError("unknown keywords: " + opts.keys().join(context, runtime.newString(", ")));
+        }
     }
 
     /**
@@ -50,7 +67,10 @@ final class OptionsReader {
      *         if not found
      */
     IRubyObject get(String key) {
-        return opts == null ? null : opts.fastARef(runtime.newSymbol(key));
+        if (opts == null) {
+            return null;
+        }
+        return opts.delete(runtime.newSymbol(key));
     }
 
     boolean hasKey(String key) {
