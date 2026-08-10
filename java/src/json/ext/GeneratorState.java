@@ -397,19 +397,19 @@ public class GeneratorState extends RubyObject {
         return scriptSafe;
     }
 
-    @JRubyMethod(name="script_safe", alias="escape_slash")
+    @JRubyMethod(name="script_safe")
     public RubyBoolean script_safe_get(ThreadContext context) {
         return RubyBoolean.newBoolean(context, scriptSafe);
     }
 
-    @JRubyMethod(name="script_safe=", alias="escape_slash=")
+    @JRubyMethod(name="script_safe=")
     public IRubyObject script_safe_set(IRubyObject script_safe) {
         checkFrozen();
         scriptSafe = script_safe.isTrue();
         return script_safe.getRuntime().newBoolean(scriptSafe);
     }
 
-    @JRubyMethod(name="script_safe?", alias="escape_slash?")
+    @JRubyMethod(name="script_safe?")
     public RubyBoolean script_safe_p(ThreadContext context) {
         return RubyBoolean.newBoolean(context, scriptSafe);
     }
@@ -566,9 +566,6 @@ public class GeneratorState extends RubyObject {
         allowNaN   = opts.getBool("allow_nan",  DEFAULT_ALLOW_NAN);
         asciiOnly  = opts.getBool("ascii_only", DEFAULT_ASCII_ONLY);
         scriptSafe = opts.getBool("script_safe", DEFAULT_SCRIPT_SAFE);
-        if (!scriptSafe) {
-            scriptSafe = opts.getBool("escape_slash", DEFAULT_SCRIPT_SAFE);
-        }
         strict = opts.getBool("strict", DEFAULT_STRICT);
         bufferInitialLength = opts.getInt("buffer_initial_length", DEFAULT_BUFFER_INITIAL_LENGTH);
 
