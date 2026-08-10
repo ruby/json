@@ -323,8 +323,6 @@ module JSON
 
           @script_safe = if opts.key?(:script_safe)
             !!opts[:script_safe]
-          elsif opts.key?(:escape_slash)
-            !!opts[:escape_slash]
           else
             false
           end
