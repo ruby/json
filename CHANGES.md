@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+### 2026-08-11 (3.0.0.rc1)
+
 With the removal of the insecure `create_additions` option, `JSON.load` and `JSON.dump` are
 now safe to use. Them being unsafe by default caused multiple security vulnerabilites in the past.
 
