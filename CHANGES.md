@@ -24,8 +24,8 @@ JavaScript comments in documents are no longer supported by default.
 Numerous rarely used aliases have been removed.
 
 * `JSON.load` defaults are now safe to use.
-* All unknown options are now cause an `ArgumentError` rather than to be ignored.
-* The `allow_comments` parsing option now default to `false`.
+* All unknown options will now cause an `ArgumentError` rather than to be ignored.
+* The `allow_comments` parsing option now defaults to `false`.
 * The `allow_duplicate_key` option now defaults to `false`, for both parsing and generating JSON.
 * Removed the `limit` positional argument of `JSON.dump`.
 * Removed the `escape_slash` alias of `script_safe`.
