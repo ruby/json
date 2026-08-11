@@ -14,10 +14,7 @@ UTF-16 surrogate pairs in order to be able to generate the whole range of
 unicode code points.
 
 All strings, that are to be encoded as JSON strings, should be UTF-8 byte
-sequences on the Ruby side. To encode raw binary strings, that aren't UTF-8
-encoded, please use the to\_json\_raw\_object method of String (which produces
-an object, that contains a byte array) and decode the result on the receiving
-endpoint.
+sequences on the Ruby side.
 
 ## Installation
 
@@ -49,8 +46,7 @@ JSON.generate(data)
 ```
 
 You can also use the `pretty_generate` method (which formats the output more
-verbosely and nicely) or `fast_generate` (which doesn't do any of the security
-checks generate performs, e. g. nesting deepness checks).
+verbosely and nicely).
 
 ## Casting non native types
 
@@ -148,7 +144,7 @@ JSON.generate({ posts: posts_json, count: posts_json.count })
 `JSON.generate` always creates the shortest possible string representation of a
 ruby data structure in one line. This is good for data storage or network
 protocols, but not so good for humans to read. Fortunately there's also
-`JSON.pretty_generate` (or `JSON.pretty_generate`) that creates a more readable
+`JSON.pretty_generate` that creates a more readable
 output:
 
 ```ruby
@@ -172,10 +168,6 @@ output:
    }
  ]
 ```
-
-There are also the methods `Kernel#j` for generate, and `Kernel#jj` for
-`pretty_generate` output to the console, that work analogous to Core Ruby's `p` and
-the `pp` library's `pp` methods.
 
 ## Security
 
