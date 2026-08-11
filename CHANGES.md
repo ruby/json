@@ -2,7 +2,27 @@
 
 ### Unreleased
 
-* All all unknown options are now cause an `ArgumentError` rather than to be ignored.
+With the removal of the insecure `create_additions` option, `JSON.load` and `JSON.dump` are
+now safe to use. Them being unsafe by default caused multiple security vulnerabilites in the past.
+
+If you did depend on `create_additions`, the recommended migration is to [implement a custom serializer using
+`JSON::Coder`](https://byroot.github.io/ruby/json/2025/08/02/whats-wrong-with-the-json-gem-api.html#the-create_additions-option).
+
+All the mutable default options, such as `JSON.load_default_options` have been removed.
+They were preventing Ractor compatiblity, and causing bug in libraries using JSON expecting the default behavior.
+`JSON` methods now always behave the same unless monkey patched.
+
+All methods options are now either keyword arguments or checked like keyword arguments, meaning
+unknown options such as typos raise `ArgumentError`.
+
+Duplicated keys are now rejected by default.
+
+JavaScript comments in documents are no longer supported by default.
+
+Numerous rarely used aliases have been removed.
+
+* `JSON.load` defaults are now safe to use.
+* All unknown options are now cause an `ArgumentError` rather than to be ignored.
 * The `allow_comments` parsing option now default to `false`.
 * The `allow_duplicate_key` option now defaults to `false`, for both parsing and generating JSON.
 * Removed the `limit` positional argument of `JSON.dump`.
