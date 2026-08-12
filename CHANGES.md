@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+* Emit a deprecation warning for the outdated `quirks_mode: true` argument.
 * Emit a deprecation for `JSON.dump` positional `limit` argument.
 
 ### 2026-07-31 (2.21.2)
