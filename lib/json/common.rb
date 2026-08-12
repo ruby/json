@@ -360,6 +360,9 @@ module JSON
   #   JSON.parse('')
   #
   def parse(source, opts = nil)
+    if opts&.key?(:quirks_mode)
+      deprecation_warning("The `quirks_mode` option was removed since json 2.0 and has no effect. It will raise an error on json 3.0")
+    end
     opts = ParserOptions.prepare(opts) unless opts.nil?
     Parser.parse(source, opts)
   end
@@ -451,6 +454,9 @@ module JSON
     if State === opts
       opts.generate(obj)
     else
+      if opts&.key?(:quirks_mode)
+        deprecation_warning("The `quirks_mode` option was removed since json 2.0 and has no effect. It will raise an error on json 3.0")
+      end
       State.generate(obj, opts, nil)
     end
   end
