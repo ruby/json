@@ -241,21 +241,37 @@ class JSONCommonInterfaceTest < Test::Unit::TestCase
     obj = eval(too_deep)
     assert_equal too_deep, dump(obj)
     assert_kind_of String, Marshal.dump(obj)
-    assert_raise(ArgumentError) { dump(obj, 100) }
+    assert_deprecated_warning(/max_nesting/) do
+      assert_raise(ArgumentError) { dump(obj, 100) }
+    end
     assert_raise(ArgumentError) { Marshal.dump(obj, 100) }
-    assert_equal too_deep, dump(obj, 101)
+    assert_deprecated_warning(/max_nesting/) do
+      assert_equal too_deep, dump(obj, 101)
+    end
     assert_kind_of String, Marshal.dump(obj, 101)
 
-    assert_equal too_deep, JSON.dump(obj, StringIO.new, 101, strict: false).string
-    assert_equal too_deep, dump(obj, StringIO.new, 101, strict: false).string
-    assert_raise(JSON::GeneratorError) { JSON.dump(Object.new, StringIO.new, 101, strict: true).string }
-    assert_raise(JSON::GeneratorError) { dump(Object.new, StringIO.new, 101, strict: true).string }
+    assert_deprecated_warning(/max_nesting/) do
+      assert_equal too_deep, JSON.dump(obj, StringIO.new, 101, strict: false).string
+    end
+    assert_deprecated_warning(/max_nesting/) do
+      assert_equal too_deep, dump(obj, StringIO.new, 101, strict: false).string
+    end
+    assert_deprecated_warning(/max_nesting/) do
+      assert_raise(JSON::GeneratorError) { JSON.dump(Object.new, StringIO.new, 101, strict: true).string }
+    end
+    assert_deprecated_warning(/max_nesting/) do
+      assert_raise(JSON::GeneratorError) { dump(Object.new, StringIO.new, 101, strict: true).string }
+    end
 
     assert_equal too_deep, dump(obj, nil, nil, strict: false)
-    assert_equal too_deep, dump(obj, nil, 101, strict: false)
+    assert_deprecated_warning(/max_nesting/) do
+      assert_equal too_deep, dump(obj, nil, 101, strict: false)
+    end
     assert_equal too_deep, dump(obj, StringIO.new, nil, strict: false).string
     assert_equal too_deep, dump(obj, nil, strict: false)
-    assert_equal too_deep, dump(obj, 101, strict: false)
+    assert_deprecated_warning(/max_nesting/) do
+      assert_equal too_deep, dump(obj, 101, strict: false)
+    end
     assert_equal too_deep, dump(obj, StringIO.new, strict: false).string
     assert_equal too_deep, dump(obj, strict: false)
   end
