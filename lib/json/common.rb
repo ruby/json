@@ -960,7 +960,14 @@ module JSON
     end
 
     opts = JSON._dump_default_options
-    opts = opts.merge(:max_nesting => limit) if limit
+    if limit
+      if RUBY_VERSION >= "3.0"
+        warn "JSON.dump's positional `limit` argument is deprecated and will be removed in json 3.0.0. Pass `max_nesting:` instead.", uplevel: 1, category: :deprecated
+      else
+        warn "JSON.dump's positional `limit` argument is deprecated and will be removed in json 3.0.0. Pass `max_nesting:` instead.", uplevel: 1
+      end
+      opts = opts.merge(:max_nesting => limit)
+    end
     opts = opts.merge(kwargs) if kwargs
 
     begin
