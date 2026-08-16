@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* Add `JSON::ParserError#json_path` to locate parse errors in the document as a JSONPath-style string (e.g. `$.foo[0].bar`). For duplicate key errors it points at the duplicated key itself.
+
 ### 2026-08-11 (3.0.0.rc1)
 
 With the removal of the insecure `create_additions` option, `JSON.load` and `JSON.dump` are

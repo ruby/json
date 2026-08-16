@@ -142,7 +142,7 @@ module JSON
 
   # This exception is raised if a parser error occurs.
   class ParserError < JSONError
-    attr_reader :line, :column
+    attr_reader :line, :column, :json_path
   end
 
   # This exception is raised if the nesting of parsed data structures is too
