@@ -143,10 +143,10 @@ if defined?(RUBY_ENGINE) and RUBY_ENGINE == 'jruby'
   end
 
   desc "Compiling jruby extension"
-  task :compile => JAVA_CLASSES
+  task compile: JAVA_CLASSES
 
   desc "Package the jruby gem"
-  task :jruby_gem => :create_jar do
+  task jruby_gem: :create_jar do
     mkdir_p 'pkg'
     sh "gem build -o pkg/json-#{PKG_VERSION}-java.gem json.gemspec"
   end
@@ -158,7 +158,7 @@ if defined?(RUBY_ENGINE) and RUBY_ENGINE == 'jruby'
     t.options = '-v'
   end
   desc "Testing library (jruby)"
-  task :test => [:create_jar ]
+  task test: [:create_jar ]
 
   file JRUBY_PARSER_JAR => :compile do
     cd 'java/src' do
@@ -178,7 +178,7 @@ if defined?(RUBY_ENGINE) and RUBY_ENGINE == 'jruby'
   end
 
   desc "Create parser jar"
-  task :create_parser_jar => JRUBY_PARSER_JAR
+  task create_parser_jar: JRUBY_PARSER_JAR
 
   file JRUBY_GENERATOR_JAR => :compile do
     cd 'java/src' do
@@ -198,15 +198,15 @@ if defined?(RUBY_ENGINE) and RUBY_ENGINE == 'jruby'
   end
 
   desc "Create generator jar"
-  task :create_generator_jar => JRUBY_GENERATOR_JAR
+  task create_generator_jar: JRUBY_GENERATOR_JAR
 
   desc "Create parser and generator jars"
-  task :create_jar => [ :create_parser_jar, :create_generator_jar ]
+  task create_jar: [ :create_parser_jar, :create_generator_jar ]
 
   desc "Build all gems and archives for a new release of the jruby extension."
-  task :build => [ :clean, :jruby_gem ]
+  task build: [ :clean, :jruby_gem ]
 
-  task :release => :build
+  task release: :build
 else
   require 'rake/extensiontask'
 
@@ -224,7 +224,7 @@ else
   end
 
   desc "Testing library (extension)"
-  task :test => [ :compile ]
+  task test: [ :compile ]
 
   begin
     require "ruby_memcheck"
@@ -249,10 +249,10 @@ else
   end
 
   desc "Build all gems and archives for a new release of json"
-  task :build => [ :clean, :package ]
+  task build: [ :clean, :package ]
 
-  task :release => :build
+  task release: :build
 end
 
 desc "Compile in the the source directory"
-task :default => [ :clean, :test ]
+task default: [ :clean, :test ]
