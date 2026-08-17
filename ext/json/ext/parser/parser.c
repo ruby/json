@@ -651,15 +651,12 @@ static VALUE build_parse_error_message(const char *format, JSON_ParserState *sta
     return rb_enc_sprintf(enc_utf8, format, ptr);
 }
 
-static void json_path_append_key(VALUE path, VALUE key)
+static bool json_path_append_key(VALUE path, VALUE key)
 {
     if (RB_SYMBOL_P(key)) {
         key = rb_sym2str(key);
-    }
-
-    if (!RB_TYPE_P(key, T_STRING)) {
-        rb_str_catf(path, "[%+"PRIsVALUE"]", key);
-        return;
+    } else if (!RB_TYPE_P(key, T_STRING)) {
+        return false;
     }
 
     long len = RSTRING_LEN(key);
@@ -673,7 +670,7 @@ static void json_path_append_key(VALUE path, VALUE key)
     if (plain) {
         rb_str_cat_cstr(path, ".");
         rb_str_cat(path, RSTRING_PTR(key), len);
-        return;
+        return true;
     }
 
     rb_str_cat_cstr(path, "[\"");
@@ -685,6 +682,7 @@ static void json_path_append_key(VALUE path, VALUE key)
         rb_str_cat(path, &c, 1);
     }
     rb_str_cat_cstr(path, "\"]");
+    return true;
 }
 
 static VALUE json_path_new(JSON_ParserState *state, VALUE duplicate_key)
@@ -702,11 +700,11 @@ static VALUE json_path_new(JSON_ParserState *state, VALUE duplicate_key)
         if (frame->type == JSON_FRAME_ARRAY) {
             rb_str_catf(path, "[%ld]", frame->phase == JSON_PHASE_ARRAY_COMMA ? count - 1 : count);
         } else if (innermost && !UNDEF_P(duplicate_key)) {
-            json_path_append_key(path, duplicate_key);
+            if (!json_path_append_key(path, duplicate_key)) break;
         } else if (count & 1) {
-            json_path_append_key(path, values->ptr[child_head - 1]);
+            if (!json_path_append_key(path, values->ptr[child_head - 1])) break;
         } else if (frame->phase == JSON_PHASE_OBJECT_COMMA && count >= 2) {
-            json_path_append_key(path, values->ptr[child_head - 2]);
+            if (!json_path_append_key(path, values->ptr[child_head - 2])) break;
         }
     }
 

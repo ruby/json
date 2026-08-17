@@ -861,9 +861,21 @@ class JSONParserTest < Test::Unit::TestCase
   end
 
   def test_parse_error_json_path_on_load
-    assert_parse_error_at "$.a.b.c" do
+    omit "JRuby errors don't contain positions" if RUBY_ENGINE == "jruby"
+
+    assert_parse_error_at "$" do
       JSON.load('{"a": {"b": {"c":', -> (obj) {
         if String === obj
+          BasicObject.new
+        else
+          obj
+        end
+      })
+    end
+
+    assert_parse_error_at "$.a" do
+      JSON.load('{"a": {"b": {"c":', -> (obj) {
+        if obj == "b"
           BasicObject.new
         else
           obj
