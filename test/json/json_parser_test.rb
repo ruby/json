@@ -856,8 +856,14 @@ class JSONParserTest < Test::Unit::TestCase
     assert_parse_error_at "$.a[1].b", '{"a": [1, {"b": xyz}]}'
     assert_parse_error_at "$.a", '{"a": 1 xyz}'
     assert_parse_error_at "$", '{"a": 1, xyz}'
+
+    assert_parse_error_at "$.a.b.c", '{"a": {"b": {"c"'
     assert_parse_error_at "$.a.b.c", '{"a": {"b": {"c":'
+    assert_parse_error_at "$.a.b", '{"a": {"b": {"c": 1, "d'
+
+    assert_parse_error_at "$[4]", '[1,2,3,4,5'
     assert_parse_error_at "$[5]", '[1,2,3,4,5,'
+    assert_parse_error_at "$[5]", '[1,2,3,4,5,]'
   end
 
   def test_parse_error_json_path_on_load
