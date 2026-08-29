@@ -698,13 +698,13 @@ module JSON
   #      @attributes={"type"=>"Admin", "password"=>"0wn3d"}>}
   #
   def unsafe_load(source, proc = nil, options = nil)
+    if proc && options.nil? && proc.is_a?(Hash)
+      options = proc
+      proc = nil
+    end
+
     opts = if options.nil?
-      if proc && proc.is_a?(Hash)
-        options, proc = proc, nil
-        options
-      else
-        _unsafe_load_default_options
-      end
+      _unsafe_load_default_options
     else
       _unsafe_load_default_options.merge(options)
     end
