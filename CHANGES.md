@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* JRuby: parser errors now include the position (`line`, `column` and the message suffix) as well as `json_path`, matching the C extension.
+
 ### 2026-09-09 (3.0.2)
 
 * Fix `JSON.load_file` and `JSON.load_file!` to load on Ruby 2.7.0 through 2.7.2, which cannot parse a leading parameter before `...`.

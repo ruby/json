@@ -6,6 +6,7 @@ import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyClass;
+import org.jruby.RubyException;
 import org.jruby.RubyFloat;
 import org.jruby.RubyHash;
 import org.jruby.RubyObject;
@@ -376,7 +377,7 @@ public class Parser extends RubyObject {
                                 continue;
                             }
                             case 0:
-                                throw newException(Utils.M_PARSER_ERROR, "unexpected end of input");
+                                throw parseError("unexpected end of input");
                             default:
                                 throw unexpectedToken(cursor, end);
                         }
@@ -572,7 +573,7 @@ public class Parser extends RubyObject {
             // match the C parser's message.
             String keyInspect = key.callMethod(context, "to_s")
                                    .callMethod(context, "inspect").asJavaString();
-            throw newException(Utils.M_PARSER_ERROR, "duplicate key " + keyInspect);
+            throw parseError(context.runtime.newString("duplicate key " + keyInspect), key);
         }
 
         private int parseDigits(long value) {
@@ -667,8 +668,7 @@ public class Parser extends RubyObject {
             long scanned = scanner.scan(data, chunks, contentStart, end);
             final int q = (int) scanned;
             if (q < 0) {
-                throw newException(Utils.M_PARSER_ERROR,
-                    "unexpected end of input, expected closing \"");
+                throw parseError("unexpected end of input, expected closing \"");
             }
 
             boolean plain = (scanned & StringScanner.PLAIN_BIT) != 0;
@@ -853,8 +853,7 @@ public class Parser extends RubyObject {
                     while (true) {
                         while (cursor < end && data[cursor] != '*') cursor++;
                         if (cursor >= end) {
-                            throw newException(Utils.M_PARSER_ERROR,
-                                "unterminated comment, expected closing '*/'");
+                            throw parseError("unterminated comment, expected closing '*/'");
                         }
                         cursor++; // past '*'
                         if (peek() == '/') {
@@ -883,11 +882,77 @@ public class Parser extends RubyObject {
             return info.jsonModule.get().getConstant(name);
         }
 
+        private long cursorPosition(int position) {
+            long column = 0;
+            int i = position;
+            if (i >= end) {
+                column = i - end + 1;
+                i = end - 1;
+            }
+            int line = 1;
+            while (i >= begin) {
+                if (data[i--] == '\n') {
+                    line++;
+                    break;
+                }
+                column++;
+            }
+            while (i >= begin) {
+                if (data[i--] == '\n') {
+                    line++;
+                }
+            }
+            return ((long) line << 32) | column;
+        }
+
+        private RubyArray jsonPathSegments(IRubyObject duplicateKey) {
+            Ruby runtime = context.runtime;
+            RubyArray segments = RubyArray.newArray(runtime);
+            for (int depth = 1; depth < frameDepth; depth++) {
+                Frame frame = frameStack[depth];
+                boolean innermost = depth == frameDepth - 1;
+                int childHead = innermost ? valueTop : frameStack[depth + 1].valueStackHead;
+                int count = childHead - frame.valueStackHead;
+
+                if (frame.type == FrameType.ARRAY) {
+                    segments.append(runtime.newFixnum(frame.phase == FramePhase.ARRAY_COMMA ? count - 1 : count));
+                } else if (innermost && duplicateKey != null) {
+                    segments.append(duplicateKey);
+                } else if ((count & 1) == 1) {
+                    segments.append(valueStack[childHead - 1]);
+                } else if (frame.phase == FramePhase.OBJECT_COMMA && count >= 2) {
+                    segments.append(valueStack[childHead - 2]);
+                } else {
+                    break;
+                }
+            }
+            return segments;
+        }
+
+        private RaiseException parseError(String message) {
+            return parseError(context.runtime.newString(message), null);
+        }
+
+        private RaiseException parseError(RubyString message, IRubyObject duplicateKey) {
+            Ruby runtime = context.runtime;
+            long position = cursorPosition(cursor);
+            int line = (int) (position >>> 32);
+            int column = (int) position;
+            message.catString(" at line " + line + " column " + column);
+            RaiseException error = Utils.newException(context, Utils.M_PARSER_ERROR, message);
+            RubyException exception = error.getException();
+            exception.setInstanceVariable("@line", runtime.newFixnum(line));
+            exception.setInstanceVariable("@column", runtime.newFixnum(column));
+            exception.setInstanceVariable("@json_path", jsonPathSegments(duplicateKey));
+            return error;
+        }
+
         private RaiseException parsingError(int absStart, int absEnd) {
+            cursor = absStart;
             RubyString msg = context.runtime.newString("unexpected token at '")
                     .cat(data, absStart, Math.min(absEnd - absStart, 32))
                     .cat((byte)'\'');
-            return newException(Utils.M_PARSER_ERROR, msg);
+            return parseError(msg, null);
         }
 
         private RaiseException unexpectedToken(int absStart, int absEnd) {
@@ -895,10 +960,6 @@ public class Parser extends RubyObject {
         }
 
         private RaiseException newException(String className, String message) {
-            return Utils.newException(context, className, message);
-        }
-
-        private RaiseException newException(String className, RubyString message) {
             return Utils.newException(context, className, message);
         }
     }
