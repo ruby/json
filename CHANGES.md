@@ -3,6 +3,7 @@
 ### Unreleased
 
 * Add `JSON::ParserError#json_path` to locate parse errors in the document as a JSONPath-style string (e.g. `$.foo[0].bar`). For duplicate key errors it points at the duplicated key itself.
+* JRuby: parser errors now include the position (`line`, `column` and the message suffix) as well as `json_path`, matching the C extension.
 
 ### 2026-08-11 (3.0.0.rc1)
 
