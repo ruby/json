@@ -10,6 +10,7 @@ import org.jruby.runtime.ThreadContext;
 import org.jruby.util.ByteList;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 /**
  * A decoder that reads a JSON-encoded string from the given sources and
@@ -24,6 +25,8 @@ final class StringDecoder extends ByteListTranscoder {
     private int surrogatePairStart = -1;
     private boolean allowControlCharacters = false;
     private boolean allowInvalidEscape = false;
+
+    private final StringScanner scanner = StringScanner.getInstance();
 
     private ByteList out;
 
@@ -43,6 +46,49 @@ final class StringDecoder extends ByteListTranscoder {
                 handleChar(context, readUtf8Char(context));
             }
             quoteStop(pos);
+            return out;
+        } catch (IOException e) {
+            throw context.runtime.newIOErrorFromException(e);
+        }
+    }
+
+    // Decodes strings with no UTF-8 validation. It is assumed the string is either ASCII-only
+    // or UTF-8 avlidation has been disabled.
+    ByteList decodeNoValidate(ThreadContext context, ByteList src, int start, int end, ByteBuffer chunks) {
+        try {
+            init(src, start, end);
+            this.out = new ByteList(end - start);
+            final byte[] data = src.unsafeBytes();
+            final int base = src.begin();
+            final int absEnd = base + srcEnd;
+            int cursor = base + pos;
+            int runStart = cursor;
+            while (cursor < absEnd) {
+                cursor = scanner.scanEscape(data, chunks, cursor, absEnd);
+                if (cursor >= absEnd) {
+                    break;
+                }
+                int b = Byte.toUnsignedInt(data[cursor]);
+                if (b == '\\') {
+                    if (cursor > runStart) {
+                        append(data, runStart, cursor - runStart);
+                    }
+                    charStart = cursor - base;
+                    pos = charStart + 1;
+                    handleEscapeSequence(context);
+                    cursor = base + pos;
+                    runStart = cursor;
+                } else {
+                    if (!allowControlCharacters) {
+                        charStart = cursor - base;
+                        throw invalidControlChar(context);
+                    }
+                    cursor++;
+                }
+            }
+            if (absEnd > runStart) {
+                append(data, runStart, absEnd - runStart);
+            }
             return out;
         } catch (IOException e) {
             throw context.runtime.newIOErrorFromException(e);
