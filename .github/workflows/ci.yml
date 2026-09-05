@@ -51,8 +51,6 @@ jobs:
         with:
           bundler-cache: true
           ruby-version: ${{ matrix.ruby }}
-          apt-get: "${{ startsWith(matrix.ruby, 'jruby') && 'ragel' || '' }}"
-          brew: "${{ startsWith(matrix.ruby, 'jruby') && 'ragel' || '' }}"
 
       - run: bundle exec rake compile ${{ matrix.env }}
 
