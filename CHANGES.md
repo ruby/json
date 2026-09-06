@@ -3,6 +3,7 @@
 ### Unreleased
 
 * Add `JSON::ParserError#json_path` to locate parse errors in the document as a JSONPath-style string (e.g. `$.foo[0].bar`). For duplicate key errors it points at the duplicated key itself.
+* Fix the parser to also reject lone trailing UTF-16 surrogates (`\uDCxx` with no leading partner), symmetric to the leading-surrogate case. The Java parser already rejected these; this closes the CRuby/JRuby parity gap.
 
 ### 2026-08-11 (3.0.0.rc1)
 
