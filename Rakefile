@@ -7,12 +7,14 @@ require 'rake/testtask'
 class UndocumentedTestTask < Rake::TestTask
   def desc(*) end
 
-  def ruby(...)
-    env_was = ENV["JSON_COVERAGE"]
-    ENV["JSON_COVERAGE"] = "1"
-    ret = super
-    ENV["JSON_COVERAGE"] = env_was
-    ret
+  if RUBY_ENGINE != "jruby"
+    def ruby(...)
+      env_was = ENV["JSON_COVERAGE"]
+      ENV["JSON_COVERAGE"] = "1"
+      ret = super
+      ENV["JSON_COVERAGE"] = env_was
+      ret
+    end
   end
 end
 
