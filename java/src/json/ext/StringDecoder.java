@@ -155,7 +155,7 @@ final class StringDecoder extends ByteListTranscoder {
             break;
         default:
             if (allowInvalidEscape) {
-              append(character);
+              writeUtf8Char(character);
             } else {
               throw invalidEscape(context);
             }
