@@ -722,6 +722,7 @@ public final class Generator {
 
     static void generateFragment(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
         RubyString result = generateFragmentNew(context, session, object);
+        if (buffer instanceof BufferedOutputStream) result = result.newFrozen();
         ByteList bytes = result.getByteList();
         buffer.write(bytes.unsafeBytes(), bytes.begin(), bytes.length());
     }
@@ -814,6 +815,7 @@ public final class Generator {
 
     static void generateGeneric(ThreadContext context, Session session, IRubyObject object, OutputStream buffer) throws IOException {
         RubyString result = generateGenericNew(context, session, object);
+        if (buffer instanceof BufferedOutputStream) result = result.newFrozen();
         ByteList bytes = result.getByteList();
         buffer.write(bytes.unsafeBytes(), bytes.begin(), bytes.length());
     }

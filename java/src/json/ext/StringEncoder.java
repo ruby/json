@@ -5,6 +5,7 @@
  */
 package json.ext;
 
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Constructor;
@@ -192,11 +193,13 @@ class StringEncoder extends ByteListTranscoder {
     void generate(ThreadContext context, RubyString object, OutputStream buffer) throws IOException {
         object = ensureValidEncoding(context, object);
 
-        ByteList byteList = object.getByteList();
+        // IO writes can mutate the original string while we are reading it.
+        RubyString source = buffer instanceof BufferedOutputStream ? object.newFrozen() : object;
+        ByteList byteList = source.getByteList();
         init(byteList);
         out = buffer;
         append('"');
-        switch (object.scanForCodeRange()) {
+        switch (source.scanForCodeRange()) {
             case StringSupport.CR_7BIT:
             case StringSupport.CR_VALID:
                 encode(byteList);
