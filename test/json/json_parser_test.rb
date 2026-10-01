@@ -565,6 +565,26 @@ class JSONParserTest < Test::Unit::TestCase
     assert_equal too_deep_ary, ok
   end
 
+  def test_nesting_empty_containers
+    {
+      '[[]]' => [[]],
+      '[{}]' => [{}],
+      '{"a":[]}' => { 'a' => [] },
+      '{"a":{}}' => { 'a' => {} },
+    }.each do |json, expected|
+      assert_raise(JSON::NestingError) { generate(expected, max_nesting: 1) }
+      assert_raise(JSON::NestingError) { parse(json, max_nesting: 1) }
+      [2, nil, false, 0].each do |limit|
+        assert_equal expected, parse(json, max_nesting: limit)
+      end
+    end
+
+    assert_equal [], parse('[]', max_nesting: 1)
+    assert_equal({}, parse('{}', max_nesting: 1))
+    assert_equal [[], {}], parse('[[],{}]', max_nesting: 2)
+    assert_equal({ 'a' => [], 'b' => {} }, parse('{"a":[],"b":{}}', max_nesting: 2))
+  end
+
   def test_backslash
     assert_raise(JSON::ParserError) do
       JSON.parse('"\\')

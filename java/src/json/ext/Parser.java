@@ -357,13 +357,13 @@ public class Parser extends RubyObject {
                             case '[': {
                                 cursor++;
                                 eatWhitespace();
+                                checkNesting();
                                 if (peek() == ']') {
                                     cursor++;
                                     value = decodeArray(0);
                                     break;
                                 }
                                 currentNesting++;
-                                checkNesting();
                                 inArray++;
                                 // Phase stays VALUE: the next iteration reads
                                 // the first element.
@@ -374,13 +374,13 @@ public class Parser extends RubyObject {
                                 int objectStart = cursor;
                                 cursor++;
                                 eatWhitespace();
+                                checkNesting();
                                 if (peek() == '}') {
                                     cursor++;
                                     value = decodeObject(0);
                                     break;
                                 }
                                 currentNesting++;
-                                checkNesting();
                                 // Phase KEY: the next iteration reads the first key.
                                 pushFrame(FrameType.OBJECT, FramePhase.OBJECT_KEY, valueTop, objectStart);
                                 continue;
@@ -522,9 +522,9 @@ public class Parser extends RubyObject {
         }
 
         private void checkNesting() {
-            if (config.maxNesting > 0 && currentNesting > config.maxNesting) {
+            if (config.maxNesting > 0 && currentNesting >= config.maxNesting) {
                 throw newException(Utils.M_NESTING_ERROR,
-                    "nesting of " + currentNesting + " is too deep");
+                    "nesting of " + (currentNesting + 1) + " is too deep");
             }
         }
 

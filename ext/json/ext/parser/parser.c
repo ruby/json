@@ -1717,6 +1717,10 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
                 // comment suspending here must resume from the bracket.
                 json_eat_whitespace_resume_at(state, config, true, value_start);
 
+                if (RB_UNLIKELY(config->max_nesting && (config->max_nesting <= state->current_nesting))) {
+                    rb_raise(eNestingError, "nesting of %d is too deep", state->current_nesting + 1);
+                }
+
                 const char next = peek(state);
                 if (next == ']') {
                     state->cursor++;
@@ -1728,9 +1732,6 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
                 }
 
                 state->current_nesting++;
-                if (RB_UNLIKELY(config->max_nesting && (config->max_nesting < state->current_nesting))) {
-                    rb_raise(eNestingError, "nesting of %d is too deep", state->current_nesting);
-                }
                 state->in_array++;
 
                 // Phase stays VALUE: the next iteration reads the first element.
@@ -1747,6 +1748,10 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
                 // Same as '[': the frame is only pushed below.
                 json_eat_whitespace_resume_at(state, config, true, value_start);
 
+                if (RB_UNLIKELY(config->max_nesting && (config->max_nesting <= state->current_nesting))) {
+                    rb_raise(eNestingError, "nesting of %d is too deep", state->current_nesting + 1);
+                }
+
                 if (peek(state) == '}') {
                     state->cursor++;
                     value = json_decode_object(state, config, 0);
@@ -1757,9 +1762,6 @@ ALWAYS_INLINE(static) bool json_parse_any(JSON_ParserState *state, JSON_ParserCo
                 }
 
                 state->current_nesting++;
-                if (RB_UNLIKELY(config->max_nesting && (config->max_nesting < state->current_nesting))) {
-                    rb_raise(eNestingError, "nesting of %d is too deep", state->current_nesting);
-                }
 
                 // Phase KEY: the next iteration reads the first key.
                 frame = json_frame_stack_push(state, (json_frame){

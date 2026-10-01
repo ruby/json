@@ -94,6 +94,27 @@ class JSONResumageParserTest < Test::Unit::TestCase
     assert_equal [1], parser.value
   end
 
+  def test_nesting_empty_containers
+    ['[[]]', '[{}]', '{"a":[]}', '{"a":{}}'].each do |json|
+      parser = new_parser(max_nesting: 1)
+      parser << json
+      assert_raise(JSON::NestingError) { parser.parse }
+    end
+  end
+
+  def test_nesting_empty_containers_split_across_feeds
+    ['[[],{}]', '{"a":[],"b":{}}'].each do |json|
+      parser = new_parser(max_nesting: 2)
+      json[0...-1].each_char do |char|
+        parser << char
+        refute parser.parse
+      end
+      parser << json[-1]
+      assert parser.parse
+      assert_equal JSON.parse(json), parser.value
+    end
+  end
+
   def test_nested_parse_error
     parser = new_parser(on_load: ->(o) do
       JSON.parse("") #=> raises JSON::ParserError
