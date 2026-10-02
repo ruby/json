@@ -112,6 +112,8 @@ module JSON
       # while generating a JSON text from a Ruby data structure.
       class State
         singleton_class.attr_accessor :default_sort_keys_proc # :nodoc:
+        singleton_class.attr_accessor :rfc8785_number_formater_proc # :nodoc:
+        singleton_class.attr_accessor :rfc8785_sort_keys_proc # :nodoc:
 
         def self.generate(obj, opts = nil, io = nil)
           new(opts).generate(obj, io)
@@ -168,6 +170,7 @@ module JSON
           @max_nesting           = 100
           @sort_keys             = false
           @allow_duplicate_key   = false
+          @rfc8785               = false
           _configure(**opts) if opts
         end
 
@@ -208,6 +211,9 @@ module JSON
         # receives the entire Hash and must return a Hash with its pairs in the
         # desired order.
         attr_reader :sort_keys
+
+        # Controls whether RFC8785 (canonicalization) mode is enabled. Otherwise returns false.
+        attr_writer :rfc8785
 
         def sort_keys=(value) # :nodoc:
           type_error = false
@@ -288,6 +294,11 @@ module JSON
           @strict
         end
 
+        # Returns true, if RFC8785 (canonicalization) mode is enabled. Otherwise returns false.
+        def rfc8785?
+          @rfc8785
+        end
+
         # Configure this State instance with the Hash _opts_, and return
         # itself.
         def configure(options)
@@ -308,7 +319,7 @@ module JSON
           array_nl: @array_nl, allow_nan: @allow_nan, as_json: @as_json, ascii_only: @ascii_only,
           sort_keys: @sort_keys, depth: @depth, buffer_initial_length: @buffer_initial_length,
           allow_duplicate_key: @allow_duplicate_key, script_safe: @script_safe, strict: @strict,
-          max_nesting: @max_nesting
+          max_nesting: @max_nesting, rfc8785: @rfc8785
         )
           if depth.negative?
             raise ArgumentError, "depth must be >= 0 (got #{depth})"
@@ -333,6 +344,8 @@ module JSON
           @script_safe = script_safe
           @strict = strict
           @max_nesting = max_nesting || 0
+          self.rfc8785 = rfc8785
+
           self
         end
 
@@ -366,12 +379,9 @@ module JSON
               !@ascii_only and !@script_safe and @max_nesting == 0 and (!@strict || Symbol === obj) and !@sort_keys
             result = generate_json(obj, ''.dup)
           else
-            if @sort_keys
-              obj = @sort_keys.call(obj)
-            end
-
             result = obj.to_json(self)
           end
+
           JSON::TruffleRuby::Generator.valid_utf8?(result) or raise GeneratorError.new(
             "source sequence #{result.inspect} is illegal/malformed utf-8",
             obj
@@ -393,6 +403,11 @@ module JSON
             buf << '{'
             first = true
             key_type = nil
+            if @rfc8785
+              obj = State.rfc8785_sort_keys_proc.call(obj)
+            elsif @sort_keys
+              obj = @sort_keys.call(obj)
+            end
             obj.each_pair do |k,v|
               if first
                 key_type = k.class
@@ -524,7 +539,15 @@ module JSON
             first = true
             key_type = nil
             indent = !state.object_nl.empty?
-            each { |key, value|
+            hash = self
+
+            if state.rfc8785?
+              hash = State.rfc8785_sort_keys_proc.call(hash)
+            elsif state.sort_keys
+              hash = state.sort_keys.call(hash)
+            end
+
+            hash.each { |key, value|
               if first
                 key_type = key.class
               else
@@ -658,6 +681,7 @@ module JSON
           # Returns a JSON string representation for this Float number.
           def to_json(state = nil, *args)
             state = State.from_state(state)
+
             if infinite? || nan?
               if state.allow_nan?
                 to_s
@@ -679,6 +703,8 @@ module JSON
               else
                 raise GeneratorError.new("#{self} not allowed in JSON", self)
               end
+            elsif state.rfc8785?
+              State.rfc8785_number_formater_proc.call(self)
             else
               to_s
             end

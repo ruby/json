@@ -403,11 +403,10 @@ public final class Generator {
     }
 
     static void generateFloat(ThreadContext context, Session session, RubyFloat object, OutputStream buffer) throws IOException {
+        final GeneratorState state = session.getState(context);
         double value = object.getValue();
 
         if (Double.isInfinite(value) || Double.isNaN(value)) {
-            GeneratorState state = session.getState(context);
-
             if (!state.allowNaN()) {
                 if (state.strict() && state.getAsJSON() != null) {
                     IRubyObject castedValue = state.getAsJSON().call(context, object, context.getRuntime().getFalse());
@@ -421,7 +420,13 @@ public final class Generator {
             }
         }
 
-        buffer.write(Double.toString(value).getBytes(UTF_8));
+        if (state.rfc8785()) {
+            RubyProc numberProc = (RubyProc)GeneratorState.rfc8785NumberFormaterProc;
+            RubyString numberString = (RubyString)Helpers.invoke(context, numberProc, "call", object);
+            buffer.write(numberString.toString().getBytes(UTF_8));
+        } else {
+            buffer.write(Double.toString(value).getBytes(UTF_8));
+        }
     }
 
     private static final byte[] EMPTY_ARRAY_BYTES = "[]".getBytes();
@@ -570,8 +575,12 @@ public final class Generator {
         }
 
         RubyProc sortKeysProc = state.getSortKeysProc();
+        if (state.rfc8785()) {
+            sortKeysProc = (RubyProc)GeneratorState.rfc8785SortKeysProc;
+        }
+
         if (sortKeysProc != null) {
-            object = (RubyHash) Helpers.invoke(context, sortKeysProc, "call", object);
+            object = (RubyHash)Helpers.invoke(context, sortKeysProc, "call", object);
         }
 
         final ByteList objectNl = state.getObjectNl();

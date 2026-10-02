@@ -37,6 +37,8 @@ public class GeneratorState extends RubyObject {
     private boolean allowDuplicateKey = false;
 
     private static IRubyObject defaultSortKeyProc;
+    public static IRubyObject rfc8785NumberFormaterProc;
+    public static IRubyObject rfc8785SortKeysProc;
 
     /**
      * The indenting unit string. Will be repeated several times for larger
@@ -112,6 +114,8 @@ public class GeneratorState extends RubyObject {
      */
     private IRubyObject sortKeys;
 
+    private boolean rfc8785 = false;
+
     /**
      * The current depth (inside a #to_json call)
      */
@@ -169,6 +173,18 @@ public class GeneratorState extends RubyObject {
     @JRubyMethod(meta=true, name="default_sort_keys_proc=")
     public static IRubyObject setDefaultSortKeyProc(IRubyObject klass, IRubyObject proc) {
         defaultSortKeyProc = proc;
+        return proc;
+    }
+
+    @JRubyMethod(meta=true, name="rfc8785_number_formater_proc=")
+    public static IRubyObject setRfc8785NumberFormaterProc(IRubyObject klass, IRubyObject proc) {
+        rfc8785NumberFormaterProc = proc;
+        return proc;
+    }
+
+    @JRubyMethod(meta=true, name="rfc8785_sort_keys_proc=")
+    public static IRubyObject setRfc8785SortKeysProc(IRubyObject klass, IRubyObject proc) {
+        rfc8785SortKeysProc = proc;
         return proc;
     }
 
@@ -493,6 +509,22 @@ public class GeneratorState extends RubyObject {
         return sortKeys;
     }
 
+    @JRubyMethod(name="rfc8785?")
+    public IRubyObject rfc8785_p(ThreadContext context) {
+        return RubyBoolean.newBoolean(context, rfc8785);
+    }
+
+    @JRubyMethod(name="rfc8785=")
+    public IRubyObject rfc8785_set(ThreadContext context, IRubyObject rfc8785) {
+        checkFrozen();
+        this.rfc8785 = rfc8785.isTrue();
+        return rfc8785;
+    }
+
+    public boolean rfc8785() {
+        return this.rfc8785;
+    }
+
     public int getDepth() {
         return depth;
     }
@@ -567,6 +599,8 @@ public class GeneratorState extends RubyObject {
         this.allowDuplicateKey = opts.getBool("allow_duplicate_key", allowDuplicateKey);
 
         if (opts.hasKey("sort_keys")) sortKeys = normalizeSortKeys(context, opts.get("sort_keys"));
+
+        rfc8785 = opts.getBool("rfc8785", rfc8785);
 
         opts.ensureEmpty();
 
