@@ -22,6 +22,7 @@ import org.jruby.runtime.Visibility;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 import org.jruby.util.ConvertBytes;
+import org.jruby.util.StringSupport;
 import org.jruby.util.ConvertDouble.DoubleConverter;
 import org.jruby.util.ConvertBytes;
 import org.jruby.util.ConvertDouble.DoubleConverter;
@@ -897,22 +898,15 @@ public class Parser extends RubyObject {
         }
 
         private long cursorPosition(int position) {
-            long column = 0;
+            position = Math.min(position, end);
             int i = position;
-            if (i >= end) {
-                column = i - end + 1;
-                i = end - 1;
-            }
             int line = 1;
-            while (i >= begin) {
-                if (data[i--] == '\n') {
-                    line++;
-                    break;
-                }
-                column++;
+            while (i > begin && data[i - 1] != '\n') {
+                i--;
             }
-            while (i >= begin) {
-                if (data[i--] == '\n') {
+            long column = StringSupport.strLength(UTF8Encoding.INSTANCE, data, i, position) + 1;
+            while (i > begin) {
+                if (data[--i] == '\n') {
                     line++;
                 }
             }
