@@ -356,13 +356,24 @@ module JSON
         # Returns the configuration instance variables as a hash, that can be
         # passed to the configure method.
         def to_h
-          result = {}
-          instance_variables.each do |iv|
-            key = iv.to_s[1..-1]
-            result[key.to_sym] = instance_variable_get(iv)
-          end
-
-          result
+          {
+            indent: @indent,
+            space: @space,
+            space_before: @space_before,
+            object_nl: @object_nl,
+            array_nl: @array_nl,
+            as_json: @as_json,
+            allow_nan: @allow_nan,
+            ascii_only: @ascii_only,
+            max_nesting: @max_nesting,
+            script_safe: @script_safe,
+            strict: @strict,
+            depth: @depth,
+            buffer_initial_length: @buffer_initial_length,
+            sort_keys: @sort_keys,
+            allow_duplicate_key: @allow_duplicate_key,
+            rfc8785: @rfc8785,
+          }
         end
 
         alias to_hash to_h
