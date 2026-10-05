@@ -192,7 +192,16 @@ module JSON
         attr_accessor :array_nl
 
         # This proc converts unsupported types into native JSON types.
-        attr_accessor :as_json
+        attr_reader :as_json
+
+        def as_json=(value)
+          raise FrozenError, "can't modify frozen #{self.class}: #{inspect}" if frozen?
+          value = value.to_proc if !(Proc === value) && value.respond_to?(:to_proc)
+          unless Proc === value
+            raise TypeError, "as_json must be a Proc"
+          end
+          @as_json = value
+        end
 
         # This integer returns the maximum level of data structure nesting in
         # the generated JSON, max_nesting = 0 if no maximum is checked.
@@ -335,7 +344,11 @@ module JSON
           @object_nl = object_nl || ''
           @array_nl = array_nl || ''
           @allow_nan = allow_nan || false
-          @as_json = as_json || false
+          if as_json
+            self.as_json = as_json
+          else
+            @as_json = false
+          end
           @ascii_only = ascii_only || false
           self.sort_keys = sort_keys
           @depth = depth
