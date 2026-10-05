@@ -5,7 +5,7 @@
 static VALUE mJSON, eNestingError, eParserError, Encoding_UTF_8;
 static VALUE CNaN, CInfinity, CMinusInfinity, JSON_empty_string;
 
-static ID i_new, i_try_convert, i_encode, i_at_line, i_at_column, i_at_json_path;
+static ID i_new, i_try_convert, i_encode, i_convert, i_finish, i_at_line, i_at_column, i_at_json_path;
 #ifndef HAVE_RB_STR_TO_INTERNED_STR
 static ID i_uminus;
 #endif
@@ -2254,6 +2254,8 @@ typedef struct JSON_ResumableParserStruct {
     rvalue_stack value_stack;
     json_frame_stack frames;
     VALUE buffer;
+    VALUE converter;
+    int source_encindex;
     size_t parsed_bytes;
     size_t incomplete_bytes;
     bool complete;
@@ -2267,6 +2269,7 @@ static void JSON_ResumableParser_mark(void *ptr)
     rvalue_stack_mark(&parser->value_stack);
     rvalue_cache_mark(&parser->state.name_cache);
     rb_gc_mark(parser->buffer); // pin the buffer
+    rb_gc_mark_movable(parser->converter);
     rb_gc_mark_movable(parser->state.parser);
 }
 
@@ -2302,6 +2305,7 @@ static void JSON_ResumableParser_compact(void *ptr)
     rvalue_stack_compact(&parser->value_stack);
     rvalue_cache_compact(&parser->state.name_cache);
     parser->buffer = rb_gc_location(parser->buffer);
+    parser->converter = rb_gc_location(parser->converter);
     parser->state.parser = rb_gc_location(parser->state.parser);
 }
 
@@ -2406,10 +2410,39 @@ static VALUE cResumableParser_initialize(int argc, VALUE *argv, VALUE self)
 
 static JSON_ResumableParser *ResumableParser_acquire(VALUE self, bool lock);
 
+static VALUE resumable_convert_encoding(JSON_ResumableParser *parser, VALUE str)
+{
+    StringValue(str);
+    if (!RSTRING_LEN(str)) {
+        return str;
+    }
+    int encindex = RB_ENCODING_GET(str);
+
+    if (parser->converter && parser->source_encindex != encindex) {
+        // Reject an incomplete sequence before switching encodings.
+        rb_funcall(parser->converter, i_finish, 0);
+        parser->converter = Qfalse;
+    }
+
+    if (encindex == utf8_encindex || encindex == binary_encindex) {
+        return convert_encoding(str);
+    }
+
+    if (!parser->converter) {
+        VALUE klass = rb_const_get(rb_cEncoding, rb_intern("Converter"));
+        VALUE encoding = rb_enc_from_encoding(rb_enc_from_index(encindex));
+        parser->converter = rb_funcall(klass, i_new, 2, encoding, Encoding_UTF_8);
+        parser->source_encindex = encindex;
+    }
+    return rb_funcall(parser->converter, i_convert, 1, str);
+}
+
 /*
  * call-seq: self << string -> self
  *
  * Appends the given string to the parser's buffer.
+ * Non-UTF-8 input is converted incrementally, retaining incomplete characters
+ * between calls. Calling #clear also resets the encoding converter.
  */
 static VALUE cResumableParser_feed(VALUE self, VALUE str)
 {
@@ -2417,7 +2450,7 @@ static VALUE cResumableParser_feed(VALUE self, VALUE str)
 
     JSON_ResumableParser *parser = ResumableParser_acquire(self, false);
 
-    str = convert_encoding(str);
+    str = resumable_convert_encoding(parser, str);
     if (!RSTRING_LEN(str)) {
         return self;
     }
@@ -2636,6 +2669,7 @@ static VALUE cResumableParser_clear(VALUE self)
 {
     JSON_ResumableParser *parser = ResumableParser_acquire(self, false);
     parser->buffer = 0;
+    parser->converter = Qfalse;
     parser->complete = true;
     parser->parsed_bytes = 0;
     parser->incomplete_bytes = 0;
@@ -2908,6 +2942,8 @@ void Init_parser(void)
     i_uminus = rb_intern("-@");
 #endif
     i_encode = rb_intern("encode");
+    i_convert = rb_intern("convert");
+    i_finish = rb_intern("finish");
     i_at_line = rb_intern("@line");
     i_at_column = rb_intern("@column");
     i_at_json_path = rb_intern("@json_path");

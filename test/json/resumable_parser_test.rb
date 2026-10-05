@@ -416,6 +416,58 @@ class JSONResumageParserTest < Test::Unit::TestCase
     assert_equal Encoding::UTF_8, value["message"].encoding
   end
 
+  def test_feed_non_utf8_chunks
+    ["UTF-16", "UTF-16LE", "UTF-16BE", "UTF-32", "UTF-32LE", "UTF-32BE", "Shift_JIS", "ISO-2022-JP"].each do |encoding|
+      expected = encoding.start_with?("UTF") ? ["日本🌌"] : ["日本"]
+      json = JSON.generate(expected).encode(encoding).b
+      chunk_size = 1
+      if RUBY_ENGINE == "truffleruby" && encoding.start_with?("UTF")
+        # TruffleRuby requires UTF-16/32 string sizes to be code-unit aligned.
+        chunk_size = encoding.start_with?("UTF-32") ? 4 : 2
+      end
+      parser = new_parser
+      (0...json.bytesize).step(chunk_size) do |offset|
+        chunk = json.byteslice(offset, chunk_size).force_encoding(encoding).freeze
+        parser << chunk
+        parser << ''
+        assert_equal offset + chunk_size == json.bytesize, parser.parse, encoding
+      end
+      assert_equal expected, parser.value, encoding
+    end
+  end
+
+  def test_clear_resets_input_encoding
+    @parser << "\x00\xD8".dup.force_encoding("UTF-16LE")
+    refute @parser.parse
+    @parser.clear
+    @parser << '["語"]'.encode("UTF-16BE")
+    assert @parser.parse
+    assert_equal ["語"], @parser.value
+  end
+
+  def test_feed_different_encodings
+    @parser << '["日",'.encode("UTF-16LE")
+    @parser << '"本",'.encode("UTF-16BE")
+    @parser << '"語"]'
+    assert @parser.parse
+    assert_equal ["日", "本", "語"], @parser.value
+  end
+
+  def test_feed_invalid_non_utf8_sequence
+    @parser << '["'.encode("UTF-16LE")
+    @parser << "\x00\xD8".dup.force_encoding("UTF-16LE")
+    assert_raise(Encoding::InvalidByteSequenceError) do
+      @parser << 'x'.encode("UTF-16LE")
+    end
+  end
+
+  def test_feed_different_encoding_with_incomplete_sequence
+    @parser << "\x00\xD8".dup.force_encoding("UTF-16LE")
+    assert_raise(Encoding::InvalidByteSequenceError) do
+      @parser << '[]'
+    end
+  end
+
   def test_eos
     assert_predicate @parser, :eos?
 
