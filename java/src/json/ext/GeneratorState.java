@@ -649,9 +649,8 @@ public class GeneratorState extends RubyObject {
     }
 
     public int increaseDepth(ThreadContext context) {
-        depth++;
         checkMaxNesting(context);
-        return depth;
+        return ++depth;
     }
 
     public int decreaseDepth() {
@@ -659,13 +658,12 @@ public class GeneratorState extends RubyObject {
     }
 
     /**
-     * Checks if the current depth is allowed as per this state's options.
+     * Checks if increasing the depth is allowed as per this state's options.
      * @param context The current context
      */
     private void checkMaxNesting(ThreadContext context) {
-        if (maxNesting != 0 && depth > maxNesting) {
-            depth--;
-            throw Utils.newException(context, Utils.M_NESTING_ERROR, "nesting of " + depth + " is too deep. Did you try to serialize objects with circular references?");
+        if (maxNesting != 0 && depth >= maxNesting) {
+            throw Utils.newException(context, Utils.M_NESTING_ERROR, "nesting of " + (depth + 1) + " is too deep. Did you try to serialize objects with circular references?");
         }
     }
 }
