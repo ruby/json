@@ -13,7 +13,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 
 import org.jcodings.Encoding;
-import org.jcodings.specific.ASCIIEncoding;
 import org.jcodings.specific.USASCIIEncoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
@@ -229,27 +228,11 @@ class StringEncoder extends ByteListTranscoder {
             return str;
         }
 
-        return tryWeirdEncodings(context, str, encoding);
+        return tryWeirdEncodings(context, str);
     }
 
-    private static RubyString tryWeirdEncodings(ThreadContext context, RubyString str, Encoding encoding) {
+    private static RubyString tryWeirdEncodings(ThreadContext context, RubyString str) {
         Ruby runtime = context.runtime;
-
-        RubyString utf8String;
-
-        if (encoding == ASCIIEncoding.INSTANCE) {
-            utf8String = str.strDup(runtime);
-            utf8String.setEncoding(UTF8Encoding.INSTANCE);
-            switch (utf8String.getCodeRange()) {
-                case StringSupport.CR_7BIT:
-                    return utf8String;
-                case StringSupport.CR_VALID:
-                    // For historical reason, we silently reinterpret binary strings as UTF-8 if it would work.
-                    // TODO: Raise in 3.0.0
-                    runtime.getWarnings().warn("JSON.generate: UTF-8 string passed as BINARY, this will raise an encoding error in json 3.0");
-                    return utf8String;
-            }
-        }
 
         try {
             str = (RubyString) str.encode(context, runtime.getEncodingService().convertEncodingToRubyEncoding(UTF8Encoding.INSTANCE));
