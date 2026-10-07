@@ -37,7 +37,7 @@ public class GeneratorState extends RubyObject {
     private boolean allowDuplicateKey = false;
 
     private static IRubyObject defaultSortKeyProc;
-    public static IRubyObject rfc8785NumberFormaterProc;
+    public static IRubyObject rfc8785NumberFormatterProc;
     public static IRubyObject rfc8785SortKeysProc;
 
     /**
@@ -176,9 +176,9 @@ public class GeneratorState extends RubyObject {
         return proc;
     }
 
-    @JRubyMethod(meta=true, name="rfc8785_number_formater_proc=")
-    public static IRubyObject setRfc8785NumberFormaterProc(IRubyObject klass, IRubyObject proc) {
-        rfc8785NumberFormaterProc = proc;
+    @JRubyMethod(meta=true, name="rfc8785_number_formatter_proc=")
+    public static IRubyObject setRfc8785NumberFormatterProc(IRubyObject klass, IRubyObject proc) {
+        rfc8785NumberFormatterProc = proc;
         return proc;
     }
 

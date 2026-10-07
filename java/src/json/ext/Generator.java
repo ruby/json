@@ -421,7 +421,7 @@ public final class Generator {
         }
 
         if (state.rfc8785()) {
-            RubyProc numberProc = (RubyProc)GeneratorState.rfc8785NumberFormaterProc;
+            RubyProc numberProc = (RubyProc)GeneratorState.rfc8785NumberFormatterProc;
             RubyString numberString = (RubyString)Helpers.invoke(context, numberProc, "call", object);
             buffer.write(numberString.toString().getBytes(UTF_8));
         } else {

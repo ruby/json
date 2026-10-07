@@ -112,7 +112,7 @@ module JSON
       # while generating a JSON text from a Ruby data structure.
       class State
         singleton_class.attr_accessor :default_sort_keys_proc # :nodoc:
-        singleton_class.attr_accessor :rfc8785_number_formater_proc # :nodoc:
+        singleton_class.attr_accessor :rfc8785_number_formatter_proc # :nodoc:
         singleton_class.attr_accessor :rfc8785_sort_keys_proc # :nodoc:
 
         def self.generate(obj, opts = nil, io = nil)
@@ -728,7 +728,7 @@ module JSON
                 raise GeneratorError.new("#{self} not allowed in JSON", self)
               end
             elsif state.rfc8785?
-              State.rfc8785_number_formater_proc.call(self)
+              State.rfc8785_number_formatter_proc.call(self)
             else
               to_s
             end
