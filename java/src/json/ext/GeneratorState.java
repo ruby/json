@@ -525,6 +525,22 @@ public class GeneratorState extends RubyObject {
         return this.rfc8785;
     }
 
+    public void validateRfc8785(ThreadContext context) {
+        if (!rfc8785) return;
+
+        String option = !indent.isEmpty() ? "indent" :
+            !space.isEmpty() ? "space" :
+            !spaceBefore.isEmpty() ? "space_before" :
+            !objectNl.isEmpty() ? "object_nl" :
+            !arrayNl.isEmpty() ? "array_nl" :
+            asciiOnly ? "ascii_only" :
+            scriptSafe ? "script_safe" :
+            allowNaN ? "allow_nan" : null;
+        if (option != null) {
+            throw context.runtime.newArgumentError(option + " cannot be used with rfc8785");
+        }
+    }
+
     public int getDepth() {
         return depth;
     }
@@ -603,6 +619,7 @@ public class GeneratorState extends RubyObject {
         rfc8785 = opts.getBool("rfc8785", rfc8785);
 
         opts.ensureEmpty();
+        validateRfc8785(context);
 
         return this;
     }

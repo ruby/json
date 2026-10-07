@@ -127,7 +127,7 @@ module JSON
           if opts
             case
             when self === opts
-              return opts
+              return opts.validate_rfc8785
             when opts.respond_to?(:to_hash)
               return new(opts.to_hash)
             when opts.respond_to?(:to_h)
@@ -308,6 +308,22 @@ module JSON
           @rfc8785
         end
 
+        def validate_rfc8785 # :nodoc:
+          if @rfc8785
+            option = if !@indent.empty? then :indent
+                     elsif !@space.empty? then :space
+                     elsif !@space_before.empty? then :space_before
+                     elsif !@object_nl.empty? then :object_nl
+                     elsif !@array_nl.empty? then :array_nl
+                     elsif @ascii_only then :ascii_only
+                     elsif @script_safe then :script_safe
+                     elsif @allow_nan then :allow_nan
+                     end
+            raise ArgumentError, "#{option} cannot be used with rfc8785" if option
+          end
+          self
+        end
+
         # Configure this State instance with the Hash _opts_, and return
         # itself.
         def configure(options)
@@ -359,7 +375,7 @@ module JSON
           @max_nesting = max_nesting || 0
           self.rfc8785 = rfc8785
 
-          self
+          validate_rfc8785
         end
 
         def allow_duplicate_key? # :nodoc:
@@ -399,6 +415,7 @@ module JSON
           return dup.generate(obj, anIO) if frozen?
 
           depth = @depth
+          validate_rfc8785
           if @indent.empty? and @space.empty? and @space_before.empty? and @object_nl.empty? and @array_nl.empty? and
               !@ascii_only and !@script_safe and @max_nesting == 0 and (!@strict || Symbol === obj) and !@sort_keys
             result = generate_json(obj, ''.dup)
@@ -542,10 +559,12 @@ module JSON
           def to_json(state = nil, *)
             state = State.from_state(state)
             depth = state.depth
-            state.check_max_nesting
-            json_transform(state)
-          ensure
-            state.depth = depth
+            begin
+              state.check_max_nesting
+              json_transform(state)
+            ensure
+              state.depth = depth
+            end
           end
 
           private
@@ -642,10 +661,12 @@ module JSON
           def to_json(state = nil, *)
             state = State.from_state(state)
             depth = state.depth
-            state.check_max_nesting
-            json_transform(state)
-          ensure
-            state.depth = depth
+            begin
+              state.check_max_nesting
+              json_transform(state)
+            ensure
+              state.depth = depth
+            end
           end
 
           private
