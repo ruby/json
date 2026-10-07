@@ -473,7 +473,7 @@ module JSON
               buf << obj.to_json(self)
             end
           when Integer
-            buf << obj.to_s
+            buf << (@rfc8785 ? State.rfc8785_number_formatter_proc.call(obj) : obj.to_s)
           when Symbol
             if @strict
               fast_serialize_string(obj.name, buf)
@@ -698,7 +698,13 @@ module JSON
 
         module Integer
           # Returns a JSON string representation for this Integer number.
-          def to_json(*) to_s end
+          def to_json(state = nil, *)
+            if state && State.from_state(state).rfc8785?
+              State.rfc8785_number_formatter_proc.call(self)
+            else
+              to_s
+            end
+          end
         end
 
         module Float

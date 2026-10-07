@@ -174,8 +174,8 @@ public final class Generator {
             case TRUE   : buffer.write(TRUE_STRING); return;
             case FALSE  : buffer.write(FALSE_STRING); return;
             case FLOAT  : generateFloat(context, session, (RubyFloat) object, buffer); return;
-            case FIXNUM : generateFixnum(session, (RubyFixnum) object, buffer); return;
-            case BIGNUM : generateBignum((RubyBignum) object, buffer); return;
+            case FIXNUM : generateFixnum(context, session, (RubyFixnum) object, buffer); return;
+            case BIGNUM : generateBignum(context, session, (RubyBignum) object, buffer); return;
             case SYMBOL : generateSymbol(context, session, (RubySymbol) object, buffer); return;
             case STRING :
                 if (Helpers.metaclass(object) != context.runtime.getString()) break;
@@ -345,11 +345,15 @@ public final class Generator {
     private static class BignumHandler extends Handler<RubyBignum> {
         @Override
         void generate(ThreadContext context, Session session, RubyBignum object, OutputStream buffer) throws IOException {
-            generateBignum(object, buffer);
+            generateBignum(context, session, object, buffer);
         }
     }
 
-    private static void generateBignum(RubyBignum object, OutputStream buffer) throws IOException {
+    private static void generateBignum(ThreadContext context, Session session, RubyBignum object, OutputStream buffer) throws IOException {
+        if (session.getState(context).rfc8785()) {
+            generateRfc8785Number(context, object, buffer);
+            return;
+        }
         BigInteger bigInt = object.getValue();
         buffer.write(bigInt.toString().getBytes(UTF_8));
     }
@@ -357,11 +361,15 @@ public final class Generator {
     private static class FixnumHandler extends Handler<RubyFixnum> {
         @Override
         void generate(ThreadContext context, Session session, RubyFixnum object, OutputStream buffer) throws IOException {
-            generateFixnum(session, object, buffer);
+            generateFixnum(context, session, object, buffer);
         }
     }
 
-    static void generateFixnum(Session session, RubyFixnum object, OutputStream buffer) throws IOException {
+    static void generateFixnum(ThreadContext context, Session session, RubyFixnum object, OutputStream buffer) throws IOException {
+        if (session.getState(context).rfc8785()) {
+            generateRfc8785Number(context, object, buffer);
+            return;
+        }
         long i = object.getLongValue();
         if (i == 0) {
             buffer.write('0');
@@ -421,12 +429,16 @@ public final class Generator {
         }
 
         if (state.rfc8785()) {
-            RubyProc numberProc = (RubyProc)GeneratorState.rfc8785NumberFormatterProc;
-            RubyString numberString = (RubyString)Helpers.invoke(context, numberProc, "call", object);
-            buffer.write(numberString.toString().getBytes(UTF_8));
+            generateRfc8785Number(context, object, buffer);
         } else {
             buffer.write(Double.toString(value).getBytes(UTF_8));
         }
+    }
+
+    private static void generateRfc8785Number(ThreadContext context, IRubyObject object, OutputStream buffer) throws IOException {
+        RubyProc numberProc = (RubyProc)GeneratorState.rfc8785NumberFormatterProc;
+        RubyString numberString = (RubyString)Helpers.invoke(context, numberProc, "call", object);
+        buffer.write(numberString.toString().getBytes(UTF_8));
     }
 
     private static final byte[] EMPTY_ARRAY_BYTES = "[]".getBytes();
