@@ -445,7 +445,7 @@ module JSON
             first = true
             key_type = nil
             if @rfc8785
-              obj = State.rfc8785_sort_keys_proc.call(obj)
+              obj = State.rfc8785_sort_keys_proc.call(obj, @strict && @as_json)
             elsif @sort_keys
               obj = @sort_keys.call(obj)
             end
@@ -585,7 +585,7 @@ module JSON
             hash = self
 
             if state.rfc8785?
-              hash = State.rfc8785_sort_keys_proc.call(hash)
+              hash = State.rfc8785_sort_keys_proc.call(hash, state.strict? && state.as_json)
             elsif state.sort_keys
               hash = state.sort_keys.call(hash)
             end
@@ -596,7 +596,7 @@ module JSON
               else
                 if key_type && !state.allow_duplicate_key? && key_type != key.class
                   key_type = nil # stop checking
-                  JSON.send(:on_mixed_keys_hash, self)
+                  JSON.send(:on_mixed_keys_hash, hash)
                 end
                 result << delim
               end
