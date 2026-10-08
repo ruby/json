@@ -588,13 +588,11 @@ public final class Generator {
             return;
         }
 
-        RubyProc sortKeysProc = state.getSortKeysProc();
         if (state.rfc8785()) {
-            sortKeysProc = (RubyProc)GeneratorState.rfc8785SortKeysProc;
-        }
-
-        if (sortKeysProc != null) {
-            object = (RubyHash)Helpers.invoke(context, sortKeysProc, "call", object);
+            IRubyObject asJSON = state.strict() ? state.as_json_get(context) : context.nil;
+            object = (RubyHash)Helpers.invoke(context, GeneratorState.rfc8785SortKeysProc, "call", object, asJSON);
+        } else if (state.getSortKeysProc() != null) {
+            object = (RubyHash)Helpers.invoke(context, state.getSortKeysProc(), "call", object);
         }
 
         final ByteList objectNl = state.getObjectNl();
