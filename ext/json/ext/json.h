@@ -5,6 +5,10 @@
 #include "ruby/encoding.h"
 #include <stdint.h>
 
+#ifndef HAVE_RB_LEN_T
+typedef long rb_len_t;
+#endif
+
 #ifndef RBIMPL_ASSERT_OR_ASSUME
 # define RBIMPL_ASSERT_OR_ASSUME(x)
 #endif

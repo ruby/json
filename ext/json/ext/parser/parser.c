@@ -138,7 +138,7 @@ ALWAYS_INLINE(static) int rstring_cache_memcmp(const char *str, const char *rptr
 ALWAYS_INLINE(static) int rstring_cache_cmp(const char *str, const long length, VALUE rstring)
 {
     const char *rstring_ptr;
-    long rstring_length;
+    rb_len_t rstring_length;
 
     RSTRING_GETMEM(rstring, rstring_ptr, rstring_length);
 
@@ -2044,7 +2044,7 @@ static int parser_config_init_i(VALUE key, VALUE val, VALUE data)
 
                     const char *method_name_beg = last_colon + 1;
                     long before_len = method_name_beg - name_cstr;
-                    long len = RSTRING_LEN(name) - before_len;
+                    rb_len_t len = RSTRING_LEN(name) - before_len;
                     VALUE method_name = rb_str_substr(name, before_len, len);
                     config->decimal_method_id = SYM2ID(rb_str_intern(method_name));
                 } else {
@@ -2137,7 +2137,7 @@ static VALUE cParser_parse(JSON_ParserConfig *config, VALUE src)
         .head = 1,
     };
 
-    long len;
+    rb_len_t len;
     const char *start;
 
     RSTRING_GETMEM(Vsource, start, len);
@@ -2456,7 +2456,7 @@ static VALUE cResumableParser_feed(VALUE self, VALUE str)
         rb_str_append(parser->buffer, str);
     }
 
-    long len;
+    rb_len_t len;
     const char *start;
     RSTRING_GETMEM(parser->buffer, start, len);
     parser->state.start = start;
@@ -2762,7 +2762,7 @@ static VALUE cResumableParser_rest(VALUE self)
 
     size_t offset = parser->state.cursor - parser->state.start;
     const char *ptr;
-    long len;
+    rb_len_t len;
     RSTRING_GETMEM(parser->buffer, ptr, len);
     return rb_utf8_str_new(ptr + offset, len - offset);
 }
