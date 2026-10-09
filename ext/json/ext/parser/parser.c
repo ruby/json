@@ -79,7 +79,7 @@ static rb_encoding *enc_utf8;
 
 #define JSON_RVALUE_CACHE_MAX_ENTRY_LENGTH 55
 
-static inline VALUE build_interned_string(const char *str, const long length)
+static inline VALUE build_interned_string(const char *str, const rb_len_t length)
 {
 # ifdef HAVE_RB_ENC_INTERNED_STR
     return rb_enc_interned_str(str, length, enc_utf8);
@@ -89,7 +89,7 @@ static inline VALUE build_interned_string(const char *str, const long length)
 # endif
 }
 
-static inline VALUE build_symbol(const char *str, const long length)
+static inline VALUE build_symbol(const char *str, const rb_len_t length)
 {
     return rb_str_intern(build_interned_string(str, length));
 }
@@ -890,12 +890,12 @@ static inline VALUE build_string(const char *start, const char *end, bool intern
     VALUE result;
 # ifdef HAVE_RB_ENC_INTERNED_STR
     if (intern) {
-      result = rb_enc_interned_str(start, (long)(end - start), enc_utf8);
+      result = rb_enc_interned_str(start, (rb_len_t)(end - start), enc_utf8);
     } else {
-      result = rb_utf8_str_new(start, (long)(end - start));
+      result = rb_utf8_str_new(start, (rb_len_t)(end - start));
     }
 # else
-    result = rb_utf8_str_new(start, (long)(end - start));
+    result = rb_utf8_str_new(start, (rb_len_t)(end - start));
     if (intern) {
         result = rb_funcall(rb_str_freeze(result), i_uminus, 0);
     }
@@ -1089,7 +1089,7 @@ NOINLINE(static) VALUE json_string_unescape(JSON_ParserState *state, JSON_Parser
 
 typedef VALUE (*json_number_decode_func_t)(const char *ptr);
 
-static inline VALUE json_decode_large_number(const char *start, long len, json_number_decode_func_t func)
+static inline VALUE json_decode_large_number(const char *start, rb_len_t len, json_number_decode_func_t func)
 {
     if (RB_LIKELY(len < MAX_NUMBER_STACK_BUFFER)) {
         char buffer[MAX_NUMBER_STACK_BUFFER];
@@ -1112,7 +1112,7 @@ static VALUE json_decode_inum(const char *buffer)
     return rb_cstr2inum(buffer, 10);
 }
 
-NOINLINE(static) VALUE json_decode_large_integer(const char *start, long len)
+NOINLINE(static) VALUE json_decode_large_integer(const char *start, rb_len_t len)
 {
     return json_decode_large_number(start, len, json_decode_inum);
 }
@@ -1153,7 +1153,7 @@ static VALUE json_decode_dnum(const char *buffer)
     return DBL2NUM(rb_cstr_to_dbl(buffer, 1));
 }
 
-NOINLINE(static) VALUE json_decode_large_float(const char *start, long len)
+NOINLINE(static) VALUE json_decode_large_float(const char *start, rb_len_t len)
 {
     return json_decode_large_number(start, len, json_decode_dnum);
 }
@@ -2045,7 +2045,7 @@ static int parser_config_init_i(VALUE key, VALUE val, VALUE data)
                     parser_config_wb_write(self, &config->decimal_class, rb_path_to_class(mod_path));
 
                     const char *method_name_beg = last_colon + 1;
-                    long before_len = method_name_beg - name_cstr;
+                    rb_len_t before_len = method_name_beg - name_cstr;
                     rb_len_t len = RSTRING_LEN(name) - before_len;
                     VALUE method_name = rb_str_substr(name, before_len, len);
                     config->decimal_method_id = SYM2ID(rb_str_intern(method_name));
