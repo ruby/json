@@ -20,9 +20,9 @@ static int utf8_encindex;
 #ifndef HAVE_RB_HASH_BULK_INSERT
 // For TruffleRuby
 static void
-rb_hash_bulk_insert(long count, const VALUE *pairs, VALUE hash)
+rb_hash_bulk_insert(rb_len_t count, const VALUE *pairs, VALUE hash)
 {
-    long index = 0;
+    rb_len_t index = 0;
     while (index < count) {
         VALUE name = pairs[index++];
         VALUE value = pairs[index++];
