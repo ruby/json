@@ -806,6 +806,8 @@ module JSON
       max_nesting
       allow_nan
       allow_duplicate_key
+      unicode_subset
+      on_invalid_char
     )).freeze
     private_constant :EXCLUDED_GENERATOR_OPTIONS
 

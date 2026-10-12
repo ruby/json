@@ -56,6 +56,8 @@ module JSON
             buffer_initial_length: buffer_initial_length,
             sort_keys: sort_keys,
             rfc8785: rfc8785?,
+            unicode_subset: unicode_subset,
+            on_invalid_char: on_invalid_char,
           }
 
           allow_duplicate_key = allow_duplicate_key?

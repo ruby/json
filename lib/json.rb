@@ -450,6 +450,15 @@ require 'json/common'
 #   and enabled +ascii_only+, +script_safe+, or +allow_nan+ raise ArgumentError.
 #   JSON.dump defaults +allow_nan+ to +false+ when +rfc8785+ is enabled.
 #   JSON::Fragment contents are inserted as is; the caller must ensure they are canonical.
+# - Options +unicode_subset+ and +on_invalid_char+ have the same values as for
+#   parsing and apply to object keys and string values before escaping.
+#   Violations raise JSON::GeneratorError with +invalid_object+ set to the
+#   original string, or produce a replaced copy without changing the input.
+#   With no subset selected, +:replace+ does not relax generation's encoding checks.
+#   +on_invalid_char: :replace+ cannot be combined with +rfc8785: true+.
+#   +ascii_only+ and +script_safe+ do not bypass repertoire validation.
+#   Replacement can make distinct keys equal; keep duplicate detection enabled.
+#   Raw JSON::Fragment contents and custom +to_json+ output are not inspected.
 #
 # In this example, +obj+ is used first to generate the shortest
 # \JSON data (no whitespace), then again with all formatting options

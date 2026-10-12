@@ -35,6 +35,8 @@ import org.jruby.util.TypeConverter;
  */
 public class GeneratorState extends RubyObject {
     private boolean allowDuplicateKey = false;
+    private int forbiddenClasses;
+    private boolean replaceInvalidChars;
 
     private static IRubyObject defaultSortKeyProc;
     public static IRubyObject rfc8785NumberFormatterProc;
@@ -251,6 +253,8 @@ public class GeneratorState extends RubyObject {
         this.depth = orig.depth;
 
         this.allowDuplicateKey = orig.allowDuplicateKey;
+        this.forbiddenClasses = orig.forbiddenClasses;
+        this.replaceInvalidChars = orig.replaceInvalidChars;
         this.sortKeys = orig.sortKeys;
 
         return this;
@@ -517,12 +521,51 @@ public class GeneratorState extends RubyObject {
     @JRubyMethod(name="rfc8785=")
     public IRubyObject rfc8785_set(ThreadContext context, IRubyObject rfc8785) {
         checkFrozen();
+        if (rfc8785.isTrue() && replaceInvalidChars) {
+            throw context.runtime.newArgumentError("on_invalid_char: :replace cannot be used with rfc8785");
+        }
         this.rfc8785 = rfc8785.isTrue();
         return rfc8785;
     }
 
     public boolean rfc8785() {
         return this.rfc8785;
+    }
+
+    public int getForbiddenClasses() {
+        return forbiddenClasses;
+    }
+
+    public boolean replaceInvalidChars() {
+        return replaceInvalidChars;
+    }
+
+    @JRubyMethod(name="unicode_subset")
+    public IRubyObject unicode_subset_get(ThreadContext context) {
+        return forbiddenClasses == 0 ? context.nil : context.runtime.newSymbol(UnicodeSubset.name(forbiddenClasses));
+    }
+
+    @JRubyMethod(name="unicode_subset=")
+    public IRubyObject unicode_subset_set(ThreadContext context, IRubyObject value) {
+        checkFrozen();
+        forbiddenClasses = UnicodeSubset.mask(context, value);
+        return value;
+    }
+
+    @JRubyMethod(name="on_invalid_char")
+    public IRubyObject on_invalid_char_get(ThreadContext context) {
+        return context.runtime.newSymbol(replaceInvalidChars ? "replace" : "raise");
+    }
+
+    @JRubyMethod(name="on_invalid_char=")
+    public IRubyObject on_invalid_char_set(ThreadContext context, IRubyObject value) {
+        checkFrozen();
+        boolean replace = UnicodeSubset.replace(context, value);
+        if (replace && rfc8785) {
+            throw context.runtime.newArgumentError("on_invalid_char: :replace cannot be used with rfc8785");
+        }
+        replaceInvalidChars = replace;
+        return value;
     }
 
     public void validateRfc8785(ThreadContext context) {
@@ -535,7 +578,8 @@ public class GeneratorState extends RubyObject {
             !arrayNl.isEmpty() ? "array_nl" :
             asciiOnly ? "ascii_only" :
             scriptSafe ? "script_safe" :
-            allowNaN ? "allow_nan" : null;
+            allowNaN ? "allow_nan" :
+            replaceInvalidChars ? "on_invalid_char: :replace" : null;
         if (option != null) {
             throw context.runtime.newArgumentError(option + " cannot be used with rfc8785");
         }
@@ -617,6 +661,8 @@ public class GeneratorState extends RubyObject {
         if (opts.hasKey("sort_keys")) sortKeys = normalizeSortKeys(context, opts.get("sort_keys"));
 
         rfc8785 = opts.getBool("rfc8785", rfc8785);
+        if (opts.hasKey("unicode_subset")) forbiddenClasses = UnicodeSubset.mask(context, opts.get("unicode_subset"));
+        if (opts.hasKey("on_invalid_char")) replaceInvalidChars = UnicodeSubset.replace(context, opts.get("on_invalid_char"));
 
         opts.ensureEmpty();
         validateRfc8785(context);
@@ -658,6 +704,8 @@ public class GeneratorState extends RubyObject {
         result.op_aset(context, runtime.newSymbol("buffer_initial_length"), buffer_initial_length_get(context));
         result.op_aset(context, runtime.newSymbol("sort_keys"), sort_keys_get(context));
         result.op_aset(context, runtime.newSymbol("allow_duplicate_key"), allow_duplicate_key_p(context));
+        result.op_aset(context, runtime.newSymbol("unicode_subset"), unicode_subset_get(context));
+        result.op_aset(context, runtime.newSymbol("on_invalid_char"), on_invalid_char_get(context));
 
         for (String name: getInstanceVariableNameList()) {
             result.op_aset(context, runtime.newSymbol(name.substring(1)), getInstanceVariables().getInstanceVariable(name));

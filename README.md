@@ -58,11 +58,12 @@ one of the repertoires in [RFC 9839](https://www.rfc-editor.org/rfc/rfc9839.html
 * `:assignables` also excludes DEL, C1 controls, and all noncharacters.
 
 Unassigned and private-use codepoints remain allowed. The default, `nil`, keeps
-the existing behavior. These options work with parsing, `JSON::Coder#load`,
+the existing behavior. These options work with parsing, generation, `JSON::Coder`,
 and `JSON::ResumableParser` (where available).
 
 ```ruby
 JSON.parse('"\u0089"', unicode_subset: :assignables) # raises JSON::ParserError
+JSON.generate("\u0089", unicode_subset: :assignables) # raises JSON::GeneratorError
 JSON.parse('"\u0089"', unicode_subset: :assignables, on_invalid_char: :replace) # => "�"
 ```
 
@@ -72,6 +73,9 @@ replacement only relaxes parsing of unpaired `\uXXXX` surrogate escapes.
 Escapes cannot bypass a subset restriction; `allow_control_characters` only
 relaxes JSON syntax. Keep duplicate-key detection enabled when replacing
 characters, since different keys can become equal after replacement.
+
+Replacement cannot be combined with `rfc8785: true`. Raw `JSON::Fragment` contents
+and custom `to_json` output remain the caller's responsibility.
 
 ## Casting non native types
 
