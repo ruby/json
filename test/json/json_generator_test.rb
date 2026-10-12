@@ -1316,6 +1316,20 @@ class JSONGeneratorTest < Test::Unit::TestCase
     assert_equal '{"1":1,"b":2}', JSON.generate({ 'b' => 2, 1 => 1 }, options.merge(strict: false))
   end
 
+  def test_rfc8785_duplicate_keys_in_different_encodings
+    latin1 = "\u00e9".encode(Encoding::ISO_8859_1)
+    hash = { latin1 => 1, "\u00e9" => 2 }
+    assert_equal 2, hash.size
+
+    error = assert_raise JSON::GeneratorError do
+      JSON.generate(hash, rfc8785: true)
+    end
+    assert_includes error.message, "detected duplicate key"
+
+    assert_rfc8785 "{\"\u00e9\":1}", { latin1 => 1 }
+    assert_rfc8785 "{\"a\":1,\"\u00e9\":2}", { latin1 => 2, "a" => 1 }
+  end
+
   def test_rfc8785_key_order_with_default_external_encoding
     # https://www.rfc-editor.org/rfc/rfc8785.html#section-3.2.3
     hash = { "\u20ac" => 1, "\r" => 2, "\ufb33" => 3, '1' => 4,

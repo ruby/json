@@ -101,12 +101,22 @@ module JSON
     })
 
     generator::State.rfc8785_sort_keys_proc = shareable_lambda(->(hash, as_json) {
-      if as_json
+      # Keys are converted when an as_json hook is given, or when a String or
+      # Symbol key is not UTF-8, since it can then match another key once both
+      # are written as UTF-8.
+      needs_conversion = as_json || hash.each_key.any? do |key|
+        next false unless String === key || Symbol === key
+        string = key.to_s
+        !(string.ascii_only? || (string.encoding == Encoding::UTF_8 && string.valid_encoding?))
+      end
+      if needs_conversion
         converted = {}
         hash.each do |key, value|
           string = (String === key || Symbol === key) ? key.to_s : nil
-          unless string && (string.ascii_only? || (string.encoding == Encoding::UTF_8 && string.valid_encoding?))
-            key = as_json.call(key, true)
+          if !as_json && !string
+            # Other keys are converted with #to_s by the generator.
+          elsif !string || !(string.ascii_only? || (string.encoding == Encoding::UTF_8 && string.valid_encoding?))
+            key = as_json ? as_json.call(key, true) : string
             unless String === key || Symbol === key
               raise GeneratorError.new("#{key.class} not allowed as object key in JSON", key)
             end
