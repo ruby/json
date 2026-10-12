@@ -154,7 +154,16 @@ module JSON
       converted = if as_json
         hash.transform_keys { |k| Ext.coerce_key(k, as_json) }
       else
-        hash.transform_keys(&:to_s)
+        hash.transform_keys do |key|
+          string = key.to_s
+          unless Ext.valid_encoding?(string)
+            if string.encoding == Encoding::UTF_8
+              raise GeneratorError.new("source sequence is illegal/malformed utf-8", key)
+            end
+            raise GeneratorError.new("object key must be UTF-8, got #{string.encoding}", key)
+          end
+          string
+        end
       end
 
       if converted.size < hash.size
