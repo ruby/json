@@ -259,6 +259,34 @@ require 'json/common'
 #   ruby = JSON.parse(source, array_class: Set)
 #   ruby # => Set["foo", 1.0, true, false, nil]
 #
+# ---
+#
+# Option +unicode_subset+ restricts object keys and string values to a repertoire
+# defined by {RFC 9839}[https://www.rfc-editor.org/rfc/rfc9839.html]:
+#
+# - +nil+ (default): preserve existing behavior.
+# - +:scalars+: reject malformed UTF-8 and surrogates.
+# - +:xml_characters+: also reject legacy C0 controls (except tab, LF and CR),
+#   and U+FFFE/U+FFFF.
+# - +:assignables+: also reject DEL, C1 controls and all noncharacters.
+#
+# Unassigned and private-use codepoints are allowed by all three subsets.
+# Restrictions apply after escape decoding and before symbolization or freezing.
+# +allow_control_characters+ relaxes syntax only; it cannot bypass the subset.
+#
+# Option +on_invalid_char+ is +:raise+ (default) or +:replace+.
+# Violations raise JSON::ParserError with the source position and +json_path+,
+# or become U+FFFD. Malformed UTF-8 is replaced once per maximal subpart.
+# With +unicode_subset: nil+, +:replace+ only permits unpaired surrogate escapes,
+# replacing each with U+FFFD; other syntax and encoding behavior is unchanged.
+#
+#   JSON.parse('"\u0089"', unicode_subset: :assignables) # Raises JSON::ParserError
+#   JSON.parse('"\u0089"', unicode_subset: :assignables, on_invalid_char: :replace) # => "�"
+#
+# Keep +allow_duplicate_key+ disabled with replacement: different keys may
+# become equal, and duplicate detection compares the replaced keys.
+# Unsupported option values raise ArgumentError.
+#
 # === Generating \JSON
 #
 # To generate a Ruby \String containing \JSON data,

@@ -1,6 +1,7 @@
 #include "../json.h"
 #include "../vendor/fast_float_parser.h"
 #include "../simd/simd.h"
+#include "../unicode.h"
 
 static VALUE mJSON, eNestingError, eParserError, Encoding_UTF_8;
 static VALUE CNaN, CInfinity, CMinusInfinity, JSON_empty_string;
@@ -12,7 +13,8 @@ static ID i_uminus;
 
 static VALUE sym_max_nesting, sym_allow_nan, sym_allow_trailing_comma, sym_allow_comments,
              sym_allow_control_characters, sym_allow_invalid_escape, sym_symbolize_names,
-             sym_freeze, sym_decimal_class, sym_on_load, sym_allow_duplicate_key;
+             sym_freeze, sym_decimal_class, sym_on_load, sym_allow_duplicate_key,
+             sym_unicode_subset, sym_on_invalid_char;
 
 static int binary_encindex;
 static int utf8_encindex;
@@ -58,6 +60,8 @@ static VALUE rb_str_to_interned_str(VALUE str)
 #define JSON_RVALUE_CACHE_CAPA 63
 typedef struct rvalue_cache_struct {
     int length;
+    uint8_t forbidden_classes;
+    bool symbolize;
     VALUE entries[JSON_RVALUE_CACHE_CAPA];
 } rvalue_cache;
 
@@ -149,7 +153,7 @@ ALWAYS_INLINE(static) int rstring_cache_cmp(const char *str, const long length, 
     }
 }
 
-ALWAYS_INLINE(static) VALUE rstring_cache_fetch(rvalue_cache *cache, const char *str, const long length)
+ALWAYS_INLINE(static) VALUE rstring_cache_fetch(rvalue_cache *cache, const char *str, const long length, bool create)
 {
     int low = 0;
     int high = cache->length - 1;
@@ -168,6 +172,8 @@ ALWAYS_INLINE(static) VALUE rstring_cache_fetch(rvalue_cache *cache, const char 
         }
     }
 
+    if (!create) return Qundef;
+
     VALUE rstring = build_interned_string(str, length);
 
     if (cache->length < JSON_RVALUE_CACHE_CAPA) {
@@ -176,7 +182,7 @@ ALWAYS_INLINE(static) VALUE rstring_cache_fetch(rvalue_cache *cache, const char 
     return rstring;
 }
 
-static VALUE rsymbol_cache_fetch(rvalue_cache *cache, const char *str, const long length)
+static VALUE rsymbol_cache_fetch(rvalue_cache *cache, const char *str, const long length, bool create)
 {
     int low = 0;
     int high = cache->length - 1;
@@ -194,6 +200,8 @@ static VALUE rsymbol_cache_fetch(rvalue_cache *cache, const char *str, const lon
             high = mid - 1;
         }
     }
+
+    if (!create) return Qundef;
 
     VALUE rsymbol = build_symbol(str, length);
 
@@ -419,6 +427,8 @@ typedef struct JSON_ParserStruct {
     bool allow_invalid_escape;
     bool symbolize_names;
     bool freeze;
+    uint8_t forbidden_classes;
+    bool replace_invalid_chars;
 } JSON_ParserConfig;
 
 typedef struct JSON_ParserStateStruct {
@@ -427,6 +437,8 @@ typedef struct JSON_ParserStateStruct {
     const char *start;
     const char *cursor;
     const char *end;
+    long line_offset;
+    rb_len_t column_offset;
     rvalue_stack *value_stack;
     json_frame_stack *frames;
     rvalue_cache name_cache;
@@ -585,7 +597,6 @@ static inline char peek(JSON_ParserState *state)
 
 static void cursor_position(JSON_ParserState *state, long *line_out, rb_len_t *column_out)
 {
-    JSON_ASSERT(!state->parser);
     JSON_ASSERT(state->cursor);
     JSON_ASSERT(state->cursor <= state->end);
 
@@ -595,12 +606,13 @@ static void cursor_position(JSON_ParserState *state, long *line_out, rb_len_t *c
     }
 
     const char *cursor = state->cursor;
-    long line = 1;
+    long line = state->line_offset + 1;
 
     while (cursor > state->start && cursor[-1] != '\n') {
         cursor--;
     }
     rb_len_t column = rb_enc_strlen(cursor, state->cursor, enc_utf8) + 1;
+    if (cursor == state->start) column += state->column_offset;
 
     while (cursor > state->start) {
         if (*--cursor == '\n') {
@@ -755,7 +767,7 @@ static const signed char digit_values[256] = {
 
 static uint32_t unescape_unicode(JSON_ParserState *state, const char *sp, const char *spe)
 {
-    if (RB_UNLIKELY(sp > spe - 4)) {
+    if (RB_UNLIKELY(spe - sp < 4)) {
         raise_syntax_error_at("incomplete unicode character escape sequence at %s", state, sp - 2);
     }
 
@@ -920,18 +932,109 @@ static inline bool json_string_cacheable_p(const char *string, size_t length)
     return length <= JSON_RVALUE_CACHE_MAX_ENTRY_LENGTH && rb_isalpha(string[0]);
 }
 
+NORETURN(static) void json_raise_unicode_error(JSON_ParserState *state, JSON_ParserConfig *config, const char *at, uint32_t cp)
+{
+    state->cursor = at;
+    VALUE message;
+    const char *subset = json_unicode_subset_name(config->forbidden_classes);
+    if (cp == UINT32_MAX) {
+        message = rb_sprintf("invalid UTF-8 is not allowed by unicode_subset: :%s", subset);
+    } else {
+        message = rb_sprintf("U+%04X is not allowed by unicode_subset: :%s", cp, subset);
+    }
+    long line;
+    rb_len_t column;
+    cursor_position(state, &line, &column);
+    rb_str_catf(message, " at line %ld column %"PRIdLEN, line, column);
+    rb_exc_raise(parse_error_new(state, message, line, column, false));
+}
+
+static inline char *json_string_unicode_copy(JSON_ParserState *state, JSON_ParserConfig *config, char *buffer, const char *p, const char *end, const char *escape)
+{
+    uint32_t cp;
+    size_t length;
+    const char *invalid;
+    while ((invalid = json_unicode_scan(p, end, config->forbidden_classes, &cp, &length))) {
+        if (!config->replace_invalid_chars) json_raise_unicode_error(state, config, invalid == escape ? invalid - 1 : invalid, cp);
+        MEMCPY(buffer, p, char, invalid - p);
+        buffer += invalid - p;
+        buffer += convert_UTF32_to_UTF8(buffer, 0xFFFD);
+        p = invalid + length;
+    }
+    MEMCPY(buffer, p, char, end - p);
+    return buffer + (end - p);
+}
+
+static inline size_t json_string_buffer_size(size_t size, JSON_ParserConfig *config)
+{
+    if (config->forbidden_classes && config->replace_invalid_chars) {
+        if (size > LONG_MAX / 3) rb_memerror();
+        return size * 3;
+    }
+    return size;
+}
+
+NOINLINE(static) VALUE json_string_subset_fastpath(JSON_ParserState *state, JSON_ParserConfig *config, const char *string, const char *stringEnd, bool is_name)
+{
+    bool intern = is_name || config->freeze;
+    bool symbolize = is_name && config->symbolize_names;
+    size_t bufferSize = stringEnd - string;
+    bool cacheable = is_name && state->in_array && json_string_cacheable_p(string, bufferSize);
+
+    if (cacheable) {
+        rvalue_cache *cache = &state->name_cache;
+        // Config can be reinitialized by on_load while this cache is in use.
+        if (cache->forbidden_classes != config->forbidden_classes || cache->symbolize != symbolize) {
+            cache->length = 0;
+            cache->forbidden_classes = config->forbidden_classes;
+            cache->symbolize = symbolize;
+        }
+        VALUE cached = symbolize ? rsymbol_cache_fetch(cache, string, bufferSize, false) :
+            rstring_cache_fetch(cache, string, bufferSize, false);
+        if (cached != Qundef) return cached;
+    }
+
+    uint32_t cp;
+    size_t length;
+    const char *invalid = json_unicode_scan(string, stringEnd, config->forbidden_classes, &cp, &length);
+    if (invalid) {
+        if (!config->replace_invalid_chars) json_raise_unicode_error(state, config, invalid, cp);
+        VALUE result = rb_str_buf_new(json_string_buffer_size(bufferSize, config));
+        rb_enc_associate_index(result, utf8_encindex);
+        char *buffer = RSTRING_PTR(result);
+        char *end = json_string_unicode_copy(state, config, buffer, string, stringEnd, NULL);
+        rb_str_set_len(result, end - buffer);
+        if (symbolize) return rb_str_intern(result);
+        return intern ? rb_str_to_interned_str(result) : result;
+    }
+
+    if (cacheable) {
+        return symbolize ? rsymbol_cache_fetch(&state->name_cache, string, bufferSize, true) :
+            rstring_cache_fetch(&state->name_cache, string, bufferSize, true);
+    }
+    return build_string(string, stringEnd, intern, symbolize);
+}
+
 static inline VALUE json_string_fastpath(JSON_ParserState *state, JSON_ParserConfig *config, const char *string, const char *stringEnd, bool is_name)
 {
+    if (RB_UNLIKELY(config->forbidden_classes)) {
+        return json_string_subset_fastpath(state, config, string, stringEnd, is_name);
+    }
     bool intern = is_name || config->freeze;
     bool symbolize = is_name && config->symbolize_names;
     size_t bufferSize = stringEnd - string;
 
     if (is_name && state->in_array && RB_LIKELY(json_string_cacheable_p(string, bufferSize))) {
+        state->name_cache.forbidden_classes = 0;
+        if (RB_UNLIKELY(state->name_cache.symbolize != symbolize)) {
+            state->name_cache.length = 0;
+            state->name_cache.symbolize = symbolize;
+        }
         VALUE cached_key;
         if (RB_UNLIKELY(symbolize)) {
-            cached_key = rsymbol_cache_fetch(&state->name_cache, string, bufferSize);
+            cached_key = rsymbol_cache_fetch(&state->name_cache, string, bufferSize, true);
         } else {
-            cached_key = rstring_cache_fetch(&state->name_cache, string, bufferSize);
+            cached_key = rstring_cache_fetch(&state->name_cache, string, bufferSize, true);
         }
 
         if (RB_LIKELY(cached_key)) {
@@ -974,19 +1077,34 @@ NOINLINE(static) VALUE json_string_unescape(JSON_ParserState *state, JSON_Parser
     bool symbolize = is_name && config->symbolize_names;
     size_t bufferSize = stringEnd - string;
     const char *p = string, *pe = string, *bufferStart;
+    const char *escaped_char = NULL;
     char *buffer;
 
-    VALUE result = rb_str_buf_new(bufferSize);
+    VALUE result = rb_str_buf_new(json_string_buffer_size(bufferSize, config));
     rb_enc_associate_index(result, utf8_encindex);
     buffer = RSTRING_PTR(result);
     bufferStart = buffer;
 
-#define APPEND_CHAR(chr) *buffer++ = chr; p = ++pe;
+#define APPEND_CHAR(chr) do { \
+    uint32_t cp = (unsigned char)(chr); \
+    if (RB_UNLIKELY(config->forbidden_classes && (config->forbidden_classes & json_unicode_classify(cp)))) { \
+        if (!config->replace_invalid_chars) json_raise_unicode_error(state, config, pe - 1, cp); \
+        buffer += convert_UTF32_to_UTF8(buffer, 0xFFFD); \
+    } else { \
+        *buffer++ = (char)cp; \
+    } \
+    p = ++pe; \
+} while (0)
 
     while (pe < stringEnd && (pe = json_next_backslash(pe, stringEnd, positions))) {
         if (pe > p) {
-          MEMCPY(buffer, p, char, pe - p);
-          buffer += pe - p;
+            if (RB_UNLIKELY(config->forbidden_classes)) {
+                buffer = json_string_unicode_copy(state, config, buffer, p, pe, escaped_char);
+                escaped_char = NULL;
+            } else {
+                MEMCPY(buffer, p, char, pe - p);
+                buffer += pe - p;
+            }
         }
         switch (*++pe) {
             case '"':
@@ -1012,6 +1130,7 @@ NOINLINE(static) VALUE json_string_unescape(JSON_ParserState *state, JSON_Parser
                 APPEND_CHAR('\f');
                 break;
             case 'u': {
+                const char *escape = pe - 1;
                 uint32_t ch = unescape_unicode(state, ++pe, stringEnd);
                 pe += 3;
                 /* To handle values above U+FFFF, we take a sequence of
@@ -1026,26 +1145,47 @@ NOINLINE(static) VALUE json_string_unescape(JSON_ParserState *state, JSON_Parser
                  */
                 if ((ch & 0xFC00) == 0xD800) {
                     pe++;
-                    if (RB_LIKELY((pe <= stringEnd - 6) && memcmp(pe, "\\u", 2) == 0)) {
+                    if (RB_LIKELY((stringEnd - pe >= 6) && memcmp(pe, "\\u", 2) == 0)) {
                         uint32_t sur = unescape_unicode(state, pe + 2, stringEnd);
 
                         if (RB_UNLIKELY((sur & 0xFC00) != 0xDC00)) {
+                            if (config->replace_invalid_chars) {
+                                ch = 0xFFFD;
+                                pe--;
+                                goto append_unicode;
+                            }
+                            if (config->forbidden_classes) json_raise_unicode_error(state, config, escape, ch);
                             raise_syntax_error_at("invalid surrogate pair at %s", state, p);
                         }
 
                         ch = (((ch & 0x3F) << 10) | ((((ch >> 6) & 0xF) + 1) << 16) | (sur & 0x3FF));
                         pe += 5;
                     } else {
+                        if (config->replace_invalid_chars) {
+                            ch = 0xFFFD;
+                            pe--;
+                            goto append_unicode;
+                        }
+                        if (config->forbidden_classes) json_raise_unicode_error(state, config, escape, ch);
                         raise_syntax_error_at("incomplete surrogate pair at %s", state, p);
                         break;
                     }
                 } else if ((ch & 0xFC00) == 0xDC00) {
+                    if (config->replace_invalid_chars) {
+                        ch = 0xFFFD;
+                        goto append_unicode;
+                    }
+                    if (config->forbidden_classes) json_raise_unicode_error(state, config, escape, ch);
                     raise_syntax_error_at("unpaired trailing surrogate at %s", state, p);
                     break;
                 }
 
-                int unescape_len = convert_UTF32_to_UTF8(buffer, ch);
-                buffer += unescape_len;
+                if (RB_UNLIKELY(config->forbidden_classes && (config->forbidden_classes & json_unicode_classify(ch)))) {
+                    if (!config->replace_invalid_chars) json_raise_unicode_error(state, config, escape, ch);
+                    ch = 0xFFFD;
+                }
+              append_unicode:
+                buffer += convert_UTF32_to_UTF8(buffer, ch);
                 p = ++pe;
                 break;
             }
@@ -1062,7 +1202,12 @@ NOINLINE(static) VALUE json_string_unescape(JSON_ParserState *state, JSON_Parser
                 }
 
                 if (config->allow_invalid_escape) {
-                    APPEND_CHAR(*pe);
+                    if ((unsigned char)*pe >= 0x80 && config->forbidden_classes) {
+                        escaped_char = pe;
+                        p = pe++;
+                    } else {
+                        APPEND_CHAR(*pe);
+                    }
                 } else {
                     raise_syntax_error_at("invalid escape character in string: %s", state, pe - 1);
                 }
@@ -1072,8 +1217,12 @@ NOINLINE(static) VALUE json_string_unescape(JSON_ParserState *state, JSON_Parser
 #undef APPEND_CHAR
 
     if (stringEnd > p) {
-      MEMCPY(buffer, p, char, stringEnd - p);
-      buffer += stringEnd - p;
+        if (RB_UNLIKELY(config->forbidden_classes)) {
+            buffer = json_string_unicode_copy(state, config, buffer, p, stringEnd, escaped_char);
+        } else {
+            MEMCPY(buffer, p, char, stringEnd - p);
+            buffer += stringEnd - p;
+        }
     }
     rb_str_set_len(result, buffer - bufferStart);
 
@@ -2020,6 +2169,8 @@ static int parser_config_init_i(VALUE key, VALUE val, VALUE data)
     else if (key == sym_allow_invalid_escape)       { config->allow_invalid_escape = RTEST(val); }
     else if (key == sym_symbolize_names)            { config->symbolize_names = RTEST(val); }
     else if (key == sym_freeze)                     { config->freeze = RTEST(val); }
+    else if (key == sym_unicode_subset)             { config->forbidden_classes = json_unicode_subset_mask(val); }
+    else if (key == sym_on_invalid_char)            { config->replace_invalid_chars = json_unicode_replace(val); }
     else if (key == sym_on_load)                    {
         if (RTEST(val) && !rb_obj_is_proc(val)) {
             val = rb_check_funcall(val, rb_intern("to_proc"), 0, NULL);
@@ -2409,6 +2560,17 @@ static VALUE cResumableParser_initialize(int argc, VALUE *argv, VALUE self)
 
 static JSON_ResumableParser *ResumableParser_acquire(VALUE self, bool lock);
 
+static void json_unicode_discard_prefix(JSON_ResumableParser *parser)
+{
+    if (parser->config.forbidden_classes && parser->state.start) {
+        long line;
+        rb_len_t column;
+        cursor_position(&parser->state, &line, &column);
+        parser->state.line_offset = line - 1;
+        parser->state.column_offset = column - 1;
+    }
+}
+
 /*
  * call-seq: self << string -> self
  *
@@ -2429,6 +2591,7 @@ static VALUE cResumableParser_feed(VALUE self, VALUE str)
     const size_t remaining = parser->state.end - parser->state.cursor;
 
     if (!remaining) {
+        json_unicode_discard_prefix(parser);
         if (parser->buffer) {
             json_str_clear(parser->buffer);
         }
@@ -2444,12 +2607,15 @@ static VALUE cResumableParser_feed(VALUE self, VALUE str)
             VALUE new_buffer = rb_obj_hide(rb_str_buf_new(remaining + RSTRING_LEN(str)));
             rb_enc_associate_index(new_buffer, utf8_encindex);
 
+            json_unicode_discard_prefix(parser);
+
             char *old_ptr = RSTRING_PTR(parser->buffer);
             memcpy(RSTRING_PTR(new_buffer), old_ptr + consumed, remaining);
             rb_str_set_len(new_buffer, remaining);
             offset = 0;
             parser->buffer = new_buffer;
         } else if (consumed > (size / 2) && size >= 512) {
+            json_unicode_discard_prefix(parser);
             rb_str_modify(parser->buffer);
             char *old_ptr = RSTRING_PTR(parser->buffer);
             memmove(old_ptr, old_ptr + consumed, remaining);
@@ -2571,6 +2737,7 @@ static VALUE cResumableParser_parse(VALUE self)
 
     json_eat_whitespace(&parser->state, &parser->config, false);
     if (eos(&parser->state)) {
+        json_unicode_discard_prefix(parser);
         json_str_clear(parser->buffer);
         parser->buffer = Qfalse;
         parser->state.start = parser->state.cursor = parser->state.end = 0;
@@ -2646,6 +2813,8 @@ static VALUE cResumableParser_clear(VALUE self)
     parser->value_stack.head = 0;
     parser->state.name_cache.length = 0;
     parser->state.current_nesting = 0;
+    parser->state.line_offset = 0;
+    parser->state.column_offset = 0;
     parser->state.in_array = 1;
     parser->state.start = parser->state.cursor = parser->state.end = NULL;
     return self;
@@ -2901,6 +3070,8 @@ void Init_parser(void)
     sym_allow_invalid_escape = ID2SYM(rb_intern("allow_invalid_escape"));
     sym_symbolize_names = ID2SYM(rb_intern("symbolize_names"));
     sym_freeze = ID2SYM(rb_intern("freeze"));
+    sym_unicode_subset = ID2SYM(rb_intern("unicode_subset"));
+    sym_on_invalid_char = ID2SYM(rb_intern("on_invalid_char"));
     sym_on_load = ID2SYM(rb_intern("on_load"));
     sym_decimal_class = ID2SYM(rb_intern("decimal_class"));
     sym_allow_duplicate_key = ID2SYM(rb_intern("allow_duplicate_key"));
