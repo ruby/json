@@ -48,6 +48,35 @@ JSON.generate(data)
 You can also use the `pretty_generate` method (which formats the output more
 verbosely and nicely).
 
+## Standards compliance
+
+The optional `unicode_subset` setting restricts object keys and string values to
+one of the repertoires in [RFC 9839](https://www.rfc-editor.org/rfc/rfc9839.html):
+
+* `:scalars` requires well-formed Unicode, excluding surrogates.
+* `:xml_characters` also excludes legacy C0 controls and U+FFFE/U+FFFF.
+* `:assignables` also excludes DEL, C1 controls, and all noncharacters.
+
+Unassigned and private-use codepoints remain allowed. The default, `nil`, keeps
+the existing behavior. These options work with parsing, generation, `JSON::Coder`,
+and `JSON::ResumableParser` (where available).
+
+```ruby
+JSON.parse('"\u0089"', unicode_subset: :assignables) # raises JSON::ParserError
+JSON.generate("\u0089", unicode_subset: :assignables) # raises JSON::GeneratorError
+JSON.parse('"\u0089"', unicode_subset: :assignables, on_invalid_char: :replace) # => "�"
+```
+
+`on_invalid_char` defaults to `:raise`. With `:replace`, forbidden codepoints and
+each maximal subpart of malformed UTF-8 become U+FFFD. With no subset selected,
+replacement only relaxes parsing of unpaired `\uXXXX` surrogate escapes.
+Escapes cannot bypass a subset restriction; `allow_control_characters` only
+relaxes JSON syntax. Keep duplicate-key detection enabled when replacing
+characters, since different keys can become equal after replacement.
+
+Replacement cannot be combined with `rfc8785: true`. Raw `JSON::Fragment` contents
+and custom `to_json` output remain the caller's responsibility.
+
 ## Casting non native types
 
 JSON documents can only support Hashes, Arrays, Strings, Integers and Floats.

@@ -25,6 +25,7 @@ final class StringDecoder extends ByteListTranscoder {
     private int surrogatePairStart = -1;
     private boolean allowControlCharacters = false;
     private boolean allowInvalidEscape = false;
+    private final boolean replaceInvalidChars;
 
     private final StringScanner scanner = StringScanner.getInstance();
 
@@ -33,9 +34,10 @@ final class StringDecoder extends ByteListTranscoder {
     // Array used for writing multibyte characters into the buffer at once
     private final byte[] aux = new byte[4];
 
-    public StringDecoder(boolean allowControlCharacters, boolean allowInvalidEscape) {
+    public StringDecoder(boolean allowControlCharacters, boolean allowInvalidEscape, boolean replaceInvalidChars) {
         this.allowControlCharacters = allowControlCharacters;
         this.allowInvalidEscape = allowInvalidEscape;
+        this.replaceInvalidChars = replaceInvalidChars;
     }
 
     ByteList decode(ThreadContext context, ByteList src, int start, int end) {
@@ -148,7 +150,8 @@ final class StringDecoder extends ByteListTranscoder {
                 handleLowSurrogate(context, (char)cp);
             } else if (Character.isLowSurrogate((char)cp)) {
                 // low surrogate with no high surrogate
-                throw invalidUtf8(context);
+                if (!replaceInvalidChars) throw invalidUtf8(context);
+                writeUtf8Char(0xfffd);
             } else {
                 writeUtf8Char(cp);
             }
@@ -171,6 +174,20 @@ final class StringDecoder extends ByteListTranscoder {
     }
 
     private void handleLowSurrogate(ThreadContext context, char highSurrogate) throws IOException {
+        if (replaceInvalidChars) {
+            int next = pos;
+            if (pos + 6 <= srcEnd && src.charAt(pos) == '\\' && src.charAt(pos + 1) == 'u') {
+                pos += 2;
+                int low = readHex(context);
+                if (Character.isLowSurrogate((char)low)) {
+                    writeUtf8Char(Character.toCodePoint(highSurrogate, (char)low));
+                    return;
+                }
+            }
+            pos = next;
+            writeUtf8Char(0xfffd);
+            return;
+        }
         surrogatePairStart = charStart;
         ensureMin(context, 1);
         int lowSurrogate = readUtf8Char(context);

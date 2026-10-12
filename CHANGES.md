@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+* Add opt-in `unicode_subset` and `on_invalid_char` options for RFC 9839 Unicode repertoires in parsing and generation, including Coder and ResumableParser.
 * JRuby: parser errors now include the position (`line`, `column` and the message suffix) as well as `json_path`, matching the C extension.
 
 ### 2026-09-09 (3.0.2)

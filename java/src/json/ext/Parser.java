@@ -51,6 +51,8 @@ public class Parser extends RubyObject {
     private boolean allowControlCharacters;
     private boolean allowInvalidEscape;
     private boolean allowDuplicateKey;
+    private int forbiddenClasses;
+    private boolean replaceInvalidChars;
     private boolean symbolizeNames;
     private boolean freeze;
     private RubyProc onLoadProc;
@@ -112,6 +114,8 @@ public class Parser extends RubyObject {
         this.allowTrailingComma = opts.getBool("allow_trailing_comma", false);
         this.symbolizeNames  = opts.getBool("symbolize_names", false);
         this.allowDuplicateKey = opts.getBool("allow_duplicate_key", false);
+        this.forbiddenClasses = UnicodeSubset.mask(context, opts.get("unicode_subset"));
+        this.replaceInvalidChars = UnicodeSubset.replace(context, opts.get("on_invalid_char"));
 
         this.freeze          = opts.getBool("freeze", false);
         this.onLoadProc      = opts.getProc("on_load");
@@ -288,7 +292,7 @@ public class Parser extends RubyObject {
             this.view = new ByteList(data, false);
             this.begin = byteList.begin();
             this.end = begin + byteList.length();
-            this.decoder = new StringDecoder(config.allowControlCharacters, config.allowInvalidEscape);
+            this.decoder = new StringDecoder(config.allowControlCharacters, config.allowInvalidEscape, config.replaceInvalidChars);
         }
 
         public IRubyObject parse(ThreadContext context) {
@@ -681,6 +685,16 @@ public class Parser extends RubyObject {
 
             cursor = q + 1; // past closing quote
 
+            if (config.forbiddenClasses != 0) {
+                ByteList content = decodeSubsetString(contentStart, q);
+                if (isName) {
+                    return internedKey(content.unsafeBytes(), content.begin(), content.realSize());
+                }
+                RubyString string = context.runtime.newString(content);
+                string.setEncoding(UTF8Encoding.INSTANCE);
+                return config.freeze ? context.runtime.freezeAndDedupString(string) : string;
+            }
+
             // Note: When running multiple read-world benchmarks in the same JVM,
             // this seems consistently faster than "if (isName && plain)"
             // and only handling the ASCII-only path in the cache.
@@ -726,6 +740,83 @@ public class Parser extends RubyObject {
             }
 
             return string;
+        }
+
+        private RaiseException stringError(int position, String message) {
+            cursor = position;
+            return parseError(message);
+        }
+
+        private int unicodeEscape(int start, int end) {
+            if (start + 6 > end) {
+                throw stringError(start, "incomplete unicode character escape sequence");
+            }
+            int cp = 0;
+            for (int i = start + 2; i < start + 6; i++) {
+                int digit = data[i] & 0xff;
+                int value = digit >= '0' && digit <= '9' ? digit - '0' :
+                    digit >= 'a' && digit <= 'f' ? digit - 'a' + 10 :
+                    digit >= 'A' && digit <= 'F' ? digit - 'A' + 10 : -1;
+                if (value < 0) throw stringError(start, "incomplete unicode character escape sequence");
+                cp = (cp << 4) | value;
+            }
+            return cp;
+        }
+
+        private ByteList decodeSubsetString(int start, int end) {
+            ByteList out = new ByteList(end - start);
+            int mask = config.forbiddenClasses;
+            for (int p = start; p < end;) {
+                int position = p;
+                int cp = data[p] & 0xff;
+                if (cp == '\\') {
+                    if (++p == end) throw stringError(position, "invalid escape character in string");
+                    cp = data[p++] & 0xff;
+                    if (cp < 0x20 && !config.allowControlCharacters) {
+                        throw stringError(position, "invalid ASCII control character in string");
+                    }
+                    switch (cp) {
+                        case 'b': cp = '\b'; break;
+                        case 'f': cp = '\f'; break;
+                        case 'n': cp = '\n'; break;
+                        case 'r': cp = '\r'; break;
+                        case 't': cp = '\t'; break;
+                        case '"': case '/': case '\\': break;
+                        case 'u':
+                            cp = unicodeEscape(position, end);
+                            p = position + 6;
+                            if (cp >= 0xd800 && cp <= 0xdbff && p + 6 <= end && data[p] == '\\' && data[p + 1] == 'u') {
+                                int low = unicodeEscape(p, end);
+                                if (low >= 0xdc00 && low <= 0xdfff) {
+                                    cp = Character.toCodePoint((char)cp, (char)low);
+                                    p += 6;
+                                }
+                            }
+                            if (cp >= 0xd800 && cp <= 0xdfff && config.replaceInvalidChars) cp = 0xfffd;
+                            break;
+                        default:
+                            if (!config.allowInvalidEscape) throw stringError(position, "invalid escape character in string");
+                            p--;
+                            long decoded = UnicodeSubset.decode(data, p, end);
+                            cp = (int)(decoded >> 32);
+                            p += (int)decoded;
+                            break;
+                    }
+                } else {
+                    if (cp < 0x20 && !config.allowControlCharacters) {
+                        throw stringError(position, "invalid ASCII control character in string");
+                    }
+                    long decoded = UnicodeSubset.decode(data, p, end);
+                    cp = (int)(decoded >> 32);
+                    p += (int)decoded;
+                }
+                if ((UnicodeSubset.classify(cp) & mask) != 0) {
+                    if (!config.replaceInvalidChars) throw stringError(position, UnicodeSubset.message(cp, mask));
+                    cp = 0xfffd;
+                }
+                UnicodeSubset.append(out, cp);
+            }
+            return out;
         }
 
         private ByteList decodeString(ThreadContext context, ByteList byteList, int start, int end, boolean isAscii) {

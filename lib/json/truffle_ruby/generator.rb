@@ -171,6 +171,8 @@ module JSON
           @sort_keys             = false
           @allow_duplicate_key   = false
           @rfc8785               = false
+          @unicode_subset        = nil
+          @on_invalid_char       = :raise
           _configure(**opts) if opts
         end
 
@@ -222,7 +224,33 @@ module JSON
         attr_reader :sort_keys
 
         # Controls whether RFC8785 (canonicalization) mode is enabled. Otherwise returns false.
-        attr_writer :rfc8785
+        def rfc8785=(value)
+          raise FrozenError, "can't modify frozen #{self.class}: #{inspect}" if frozen?
+          if value && @on_invalid_char == :replace
+            raise ArgumentError, "on_invalid_char: :replace cannot be used with rfc8785"
+          end
+          @rfc8785 = value
+        end
+
+        # The Unicode character repertoire used for strings and object keys.
+        attr_reader :unicode_subset, :on_invalid_char
+
+        def unicode_subset=(value)
+          raise FrozenError, "can't modify frozen #{self.class}: #{inspect}" if frozen?
+          UnicodeSubset.mask(value)
+          @unicode_subset = value
+        end
+
+        def on_invalid_char=(value)
+          raise FrozenError, "can't modify frozen #{self.class}: #{inspect}" if frozen?
+          unless :raise.equal?(value) || :replace.equal?(value)
+            raise ArgumentError, "on_invalid_char must be :raise or :replace"
+          end
+          if value == :replace && @rfc8785
+            raise ArgumentError, "on_invalid_char: :replace cannot be used with rfc8785"
+          end
+          @on_invalid_char = value
+        end
 
         def sort_keys=(value) # :nodoc:
           type_error = false
@@ -318,6 +346,7 @@ module JSON
                      elsif @ascii_only then :ascii_only
                      elsif @script_safe then :script_safe
                      elsif @allow_nan then :allow_nan
+                     elsif @on_invalid_char == :replace then "on_invalid_char: :replace"
                      end
             raise ArgumentError, "#{option} cannot be used with rfc8785" if option
           end
@@ -344,7 +373,8 @@ module JSON
           array_nl: @array_nl, allow_nan: @allow_nan, as_json: @as_json, ascii_only: @ascii_only,
           sort_keys: @sort_keys, depth: @depth, buffer_initial_length: @buffer_initial_length,
           allow_duplicate_key: @allow_duplicate_key, script_safe: @script_safe, strict: @strict,
-          max_nesting: @max_nesting, rfc8785: @rfc8785
+          max_nesting: @max_nesting, rfc8785: @rfc8785,
+          unicode_subset: @unicode_subset, on_invalid_char: @on_invalid_char
         )
           if depth.negative?
             raise ArgumentError, "depth must be >= 0 (got #{depth})"
@@ -373,7 +403,12 @@ module JSON
           @script_safe = script_safe
           @strict = strict
           @max_nesting = max_nesting || 0
-          self.rfc8785 = rfc8785
+          self.unicode_subset = unicode_subset
+          unless :raise.equal?(on_invalid_char) || :replace.equal?(on_invalid_char)
+            raise ArgumentError, "on_invalid_char must be :raise or :replace"
+          end
+          @on_invalid_char = on_invalid_char
+          @rfc8785 = rfc8785
 
           validate_rfc8785
         end
@@ -402,10 +437,37 @@ module JSON
             sort_keys: @sort_keys,
             allow_duplicate_key: @allow_duplicate_key,
             rfc8785: @rfc8785,
+            unicode_subset: @unicode_subset,
+            on_invalid_char: @on_invalid_char,
           }
         end
 
         alias to_hash to_h
+
+        def prepare_string(string, original = string) # :nodoc:
+          if [Encoding::UTF_8, Encoding::US_ASCII, Encoding::BINARY].include?(string.encoding)
+            utf8 = string.encoding == Encoding::UTF_8 ? string : string.dup.force_encoding(Encoding::UTF_8)
+            string = enforce_unicode_subset(utf8, original) if UnicodeSubset.violation(utf8, @unicode_subset)
+            string = string.encode(Encoding::UTF_8) unless string.encoding == Encoding::UTF_8
+          else
+            string = enforce_unicode_subset(string.encode(Encoding::UTF_8), original)
+          end
+          string
+        rescue EncodingError => error
+          raise GeneratorError.new(error.message, original)
+        end
+
+        private def enforce_unicode_subset(string, original)
+          violation = UnicodeSubset.violation(string, @unicode_subset)
+          return string unless violation
+          if @on_invalid_char == :replace
+            UnicodeSubset.scrub(string, @unicode_subset)
+          else
+            cp, = violation
+            character = cp ? 'U+%04X' % cp : 'invalid UTF-8 sequence'
+            raise GeneratorError.new("#{character} is not allowed by unicode_subset: #{@unicode_subset.inspect}", original)
+          end
+        end
 
         # Generates a valid JSON document from object +obj+ and
         # returns the result. If no valid JSON document can be
@@ -444,8 +506,9 @@ module JSON
             buf << '{'
             first = true
             key_type = nil
+            seen_keys = {} if @unicode_subset && @on_invalid_char == :replace && !@allow_duplicate_key
             if @rfc8785
-              obj = State.rfc8785_sort_keys_proc.call(obj, @strict && @as_json)
+              obj = State.rfc8785_sort_keys_proc.call(obj, @strict && @as_json, @unicode_subset)
             elsif @sort_keys
               obj = @sort_keys.call(obj)
             end
@@ -453,7 +516,7 @@ module JSON
               if first
                 key_type = k.class
               else
-                if key_type && !@allow_duplicate_key && key_type != k.class
+                if key_type && !seen_keys && !@allow_duplicate_key && key_type != k.class
                   key_type = nil # stop checking
                   JSON.send(:on_mixed_keys_hash, obj)
                 end
@@ -461,6 +524,13 @@ module JSON
               end
 
               key_str = k.to_s
+              key_str = prepare_string(key_str) if @unicode_subset && key_str.is_a?(String)
+              if seen_keys
+                if seen_keys.key?(key_str)
+                  raise GeneratorError.new("detected duplicate key #{key_str.inspect} in #{obj.inspect}", obj)
+                end
+                seen_keys[key_str] = true
+              end
               if key_str.class == String
                 fast_serialize_string(key_str, buf)
               elsif key_str.is_a?(String)
@@ -505,6 +575,7 @@ module JSON
 
         # Assumes !@ascii_only, !@script_safe
         private def fast_serialize_string(string, buf) # :nodoc:
+          string = prepare_string(string) if @unicode_subset
           buf << '"'
           unless string.encoding == ::Encoding::UTF_8
             begin
@@ -545,7 +616,7 @@ module JSON
                 end
               end
             else
-              to_s.to_json
+              state&.unicode_subset ? to_s.to_json(state) : to_s.to_json
             end
           end
         end
@@ -581,20 +652,22 @@ module JSON
             result = "{#{state.object_nl}"
             first = true
             key_type = nil
+            seen_keys = {} if state.unicode_subset && state.on_invalid_char == :replace && !state.allow_duplicate_key?
             indent = !state.object_nl.empty?
             hash = self
 
             if state.rfc8785?
-              hash = State.rfc8785_sort_keys_proc.call(hash, state.strict? && state.as_json)
+              hash = State.rfc8785_sort_keys_proc.call(hash, state.strict? && state.as_json, state.unicode_subset)
             elsif state.sort_keys
               hash = state.sort_keys.call(hash)
             end
 
             hash.each { |key, value|
+              original_key = key
               if first
                 key_type = key.class
               else
-                if key_type && !state.allow_duplicate_key? && key_type != key.class
+                if key_type && !seen_keys && !state.allow_duplicate_key? && key_type != key.class
                   key_type = nil # stop checking
                   JSON.send(:on_mixed_keys_hash, hash)
                 end
@@ -611,13 +684,23 @@ module JSON
                   raise GeneratorError.new("#{key.class} not allowed as object key in JSON", key)
                 end
 
-                unless Generator.valid_encoding?(key)
+                unless state.unicode_subset || Generator.valid_encoding?(key)
                   raise GeneratorError.new("source sequence is illegal/malformed utf-8", key)
                 end
               end
 
               key_str = key.to_s
               if key_str.is_a?(String)
+                if state.unicode_subset
+                  original_string = original_key.is_a?(String) ? original_key : key_str
+                  key_str = state.prepare_string(key_str, original_string)
+                end
+                if seen_keys
+                  if seen_keys.key?(key_str)
+                    raise GeneratorError.new("detected duplicate key #{key_str.inspect} in #{hash.inspect}", hash)
+                  end
+                  seen_keys[key_str] = true
+                end
                 key_json = key_str.to_json(state)
               else
                 raise TypeError, "#{key.class}#to_s returns an instance of #{key_str.class}, expected a String"
@@ -790,7 +873,9 @@ module JSON
               end
             end
 
-            if string.encoding == ::Encoding::UTF_8
+            if state.unicode_subset
+              string = state.prepare_string(string, self)
+            elsif string.encoding == ::Encoding::UTF_8
               unless string.valid_encoding?
                 raise GeneratorError.new("source sequence is illegal/malformed utf-8", self)
               end

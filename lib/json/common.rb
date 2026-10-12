@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json/version'
+require 'json/unicode_subset'
 
 module JSON
   module ParserOptions # :nodoc:
@@ -796,6 +797,8 @@ module JSON
       freeze
       allow_duplicate_key
       decimal_class
+      unicode_subset
+      on_invalid_char
     ).freeze
     private_constant :PARSER_OPTIONS
 
@@ -803,6 +806,8 @@ module JSON
       max_nesting
       allow_nan
       allow_duplicate_key
+      unicode_subset
+      on_invalid_char
     )).freeze
     private_constant :EXCLUDED_GENERATOR_OPTIONS
 

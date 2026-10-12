@@ -259,6 +259,34 @@ require 'json/common'
 #   ruby = JSON.parse(source, array_class: Set)
 #   ruby # => Set["foo", 1.0, true, false, nil]
 #
+# ---
+#
+# Option +unicode_subset+ restricts object keys and string values to a repertoire
+# defined by {RFC 9839}[https://www.rfc-editor.org/rfc/rfc9839.html]:
+#
+# - +nil+ (default): preserve existing behavior.
+# - +:scalars+: reject malformed UTF-8 and surrogates.
+# - +:xml_characters+: also reject legacy C0 controls (except tab, LF and CR),
+#   and U+FFFE/U+FFFF.
+# - +:assignables+: also reject DEL, C1 controls and all noncharacters.
+#
+# Unassigned and private-use codepoints are allowed by all three subsets.
+# Restrictions apply after escape decoding and before symbolization or freezing.
+# +allow_control_characters+ relaxes syntax only; it cannot bypass the subset.
+#
+# Option +on_invalid_char+ is +:raise+ (default) or +:replace+.
+# Violations raise JSON::ParserError with the source position and +json_path+,
+# or become U+FFFD. Malformed UTF-8 is replaced once per maximal subpart.
+# With +unicode_subset: nil+, +:replace+ only permits unpaired surrogate escapes,
+# replacing each with U+FFFD; other syntax and encoding behavior is unchanged.
+#
+#   JSON.parse('"\u0089"', unicode_subset: :assignables) # Raises JSON::ParserError
+#   JSON.parse('"\u0089"', unicode_subset: :assignables, on_invalid_char: :replace) # => "�"
+#
+# Keep +allow_duplicate_key+ disabled with replacement: different keys may
+# become equal, and duplicate detection compares the replaced keys.
+# Unsupported option values raise ArgumentError.
+#
 # === Generating \JSON
 #
 # To generate a Ruby \String containing \JSON data,
@@ -422,6 +450,15 @@ require 'json/common'
 #   and enabled +ascii_only+, +script_safe+, or +allow_nan+ raise ArgumentError.
 #   JSON.dump defaults +allow_nan+ to +false+ when +rfc8785+ is enabled.
 #   JSON::Fragment contents are inserted as is; the caller must ensure they are canonical.
+# - Options +unicode_subset+ and +on_invalid_char+ have the same values as for
+#   parsing and apply to object keys and string values before escaping.
+#   Violations raise JSON::GeneratorError with +invalid_object+ set to the
+#   original string, or produce a replaced copy without changing the input.
+#   With no subset selected, +:replace+ does not relax generation's encoding checks.
+#   +on_invalid_char: :replace+ cannot be combined with +rfc8785: true+.
+#   +ascii_only+ and +script_safe+ do not bypass repertoire validation.
+#   Replacement can make distinct keys equal; keep duplicate detection enabled.
+#   Raw JSON::Fragment contents and custom +to_json+ output are not inspected.
 #
 # In this example, +obj+ is used first to generate the shortest
 # \JSON data (no whitespace), then again with all formatting options

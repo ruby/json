@@ -102,6 +102,20 @@ class JSONInRactorTest < Test::Unit::TestCase
     assert_predicate status, :success?
   end
 
+  def test_unicode_subset_coder
+    coder = JSON::Coder.new(unicode_subset: :assignables, on_invalid_char: :replace).freeze
+    assert Ractor.shareable?(coder)
+    pid = fork do
+      Warning[:experimental] = false
+      result = Ractor.new(coder) do |shared_coder|
+        [shared_coder.load('"\u0089"'), shared_coder.dump("\u0000")]
+      end.value
+      exit(result == ["\uFFFD", "\"\uFFFD\""] ? 0 : 1)
+    end
+    _, status = Process.waitpid2(pid)
+    assert_predicate status, :success?
+  end
+
   class NonNative
     def initialize(value)
       @value = value

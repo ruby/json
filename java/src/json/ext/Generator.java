@@ -7,6 +7,7 @@ package json.ext;
 
 import org.jcodings.Encoding;
 import org.jcodings.specific.UTF8Encoding;
+import org.jcodings.specific.ASCIIEncoding;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyBasicObject;
@@ -590,7 +591,7 @@ public final class Generator {
 
         if (state.rfc8785()) {
             IRubyObject asJSON = state.strict() ? state.as_json_get(context) : context.nil;
-            object = (RubyHash)Helpers.invoke(context, GeneratorState.rfc8785SortKeysProc, "call", object, asJSON);
+            object = (RubyHash)Helpers.invoke(context, GeneratorState.rfc8785SortKeysProc, "call", object, asJSON, state.unicode_subset_get(context));
         } else if (state.getSortKeysProc() != null) {
             object = (RubyHash)Helpers.invoke(context, state.getSortKeysProc(), "call", object);
         }
@@ -606,13 +607,17 @@ public final class Generator {
 
         boolean firstPair = true;
         HashKeyTracker tracker = new HashKeyTracker(object);
+        RubyHash emittedKeys = state.getForbiddenClasses() != 0 && state.replaceInvalidChars() && !state.getAllowDuplicateKey()
+            ? RubyHash.newHash(context.runtime) : null;
         for (RubyHash.RubyHashEntry entry : (Set<RubyHash.RubyHashEntry>) object.directEntrySet()) {
-            if (firstPair) {
-                tracker.trackFirst(context, session, (IRubyObject)entry.getKey());
-            } else {
-                tracker.track(context, session, (IRubyObject)entry.getKey());
+            if (emittedKeys == null) {
+                if (firstPair) {
+                    tracker.trackFirst(context, session, (IRubyObject)entry.getKey());
+                } else {
+                    tracker.track(context, session, (IRubyObject)entry.getKey());
+                }
             }
-            processEntry(context, session, buffer, entry, firstPair, objectNl, indent, spaceBefore, space);
+            processEntry(context, session, buffer, object, entry, firstPair, objectNl, indent, spaceBefore, space, emittedKeys);
             firstPair = false;
         }
         int oldDepth = state.decreaseDepth();
@@ -640,7 +645,7 @@ public final class Generator {
         }
     }
 
-    private static void processEntry(ThreadContext context, Session session, OutputStream buffer, RubyHash.RubyHashEntry entry, boolean firstPair, ByteList objectNl, byte[] indent, ByteList spaceBefore, ByteList space) {
+    private static void processEntry(ThreadContext context, Session session, OutputStream buffer, RubyHash object, RubyHash.RubyHashEntry entry, boolean firstPair, ByteList objectNl, byte[] indent, ByteList spaceBefore, ByteList space, RubyHash emittedKeys) {
         StringEncoder encoder = session.getStringEncoder(context);
 
         IRubyObject key = (IRubyObject) entry.getKey();
@@ -655,9 +660,11 @@ public final class Generator {
 
             Ruby runtime = context.runtime;
 
+            GeneratorState state = session.getState(context);
             IRubyObject keyStr = castKey(context, key);
-            if (keyStr == null || !(keyStr instanceof RubyString) || !encoder.hasValidEncoding((RubyString)keyStr)) {
-                GeneratorState state = session.getState(context);
+            RubyString originalKey = keyStr instanceof RubyString ? (RubyString)keyStr : null;
+            if (keyStr == null || !(keyStr instanceof RubyString) ||
+                    !encoder.hasValidEncoding((RubyString)keyStr)) {
                 if (state.strict()) {
                     if (state.getAsJSON() != null) {
                         key = state.getAsJSON().call(context, key, context.getRuntime().getTrue());
@@ -673,8 +680,20 @@ public final class Generator {
                 }
             }
 
+            if (state.getForbiddenClasses() != 0) {
+                Utils.ensureString(keyStr);
+                keyStr = prepareUnicodeString(context, state, (RubyString)keyStr, originalKey == null ? (RubyString)keyStr : originalKey);
+                if (emittedKeys != null) {
+                    if (emittedKeys.hasKey(keyStr)) {
+                        throw Utils.buildGeneratorError(context, object,
+                            "detected duplicate key " + keyStr.callMethod(context, "inspect") + " in " +
+                            object.callMethod(context, "inspect")).toThrowable();
+                    }
+                    emittedKeys.op_aset(context, keyStr, context.tru);
+                }
+            }
             if (keyStr.getMetaClass() == runtime.getString()) {
-                generateString(context, session, (RubyString) keyStr, buffer);
+                encoder.generate(context, (RubyString)keyStr, buffer);
             } else {
                 Utils.ensureString(keyStr);
                 generateFor(context, session, keyStr, buffer);
@@ -703,6 +722,7 @@ public final class Generator {
         void generate(ThreadContext context, Session session, RubyString object, OutputStream buffer) throws IOException {
             GeneratorState state = session.getState(context);
             StringEncoder encoder = session.getStringEncoder(context);
+            RubyString original = object;
 
             if (state.strict() && !encoder.hasValidEncoding(object) && state.getAsJSON() != null) {
                 IRubyObject value = state.getAsJSON().call(context, object, context.getRuntime().getFalse());
@@ -714,12 +734,48 @@ public final class Generator {
                     return;
                 }
             }
-            generateString(context, session, object, buffer);
+            if (state.getForbiddenClasses() != 0) object = prepareUnicodeString(context, state, object, original);
+            encoder.generate(context, object, buffer);
         }
     }
 
+    private static RubyString prepareUnicodeString(ThreadContext context, GeneratorState state, RubyString string, RubyString original) {
+        string = string.getEncoding() == ASCIIEncoding.INSTANCE
+            ? string : StringEncoder.ensureValidEncoding(context, string);
+        ByteList bytes = string.getByteList();
+        byte[] data = bytes.unsafeBytes();
+        int start = bytes.begin();
+        int end = start + bytes.realSize();
+        int runStart = start;
+        ByteList replaced = null;
+        for (int p = start; p < end;) {
+            long decoded = UnicodeSubset.decode(data, p, end);
+            int cp = (int)(decoded >> 32);
+            int length = (int)decoded;
+            if ((UnicodeSubset.classify(cp) & state.getForbiddenClasses()) != 0) {
+                if (!state.replaceInvalidChars()) {
+                    throw Utils.buildGeneratorError(context, original, UnicodeSubset.message(cp, state.getForbiddenClasses())).toThrowable();
+                }
+                if (replaced == null) replaced = new ByteList(bytes.realSize());
+                replaced.append(data, runStart, p - runStart);
+                UnicodeSubset.append(replaced, 0xfffd);
+                runStart = p + length;
+            }
+            p += length;
+        }
+        if (replaced == null) return StringEncoder.ensureValidEncoding(context, string);
+        replaced.append(data, runStart, end - runStart);
+        replaced.setEncoding(UTF8Encoding.INSTANCE);
+        return context.runtime.newString(replaced);
+    }
+
     static void generateString(ThreadContext context, Session session, RubyString object, OutputStream buffer) throws IOException {
-        session.getStringEncoder(context).generate(context, object, buffer);
+        GeneratorState state = session.getState(context);
+        if (state.getForbiddenClasses() != 0) {
+            STRING_HANDLER.generate(context, session, object, buffer);
+        } else {
+            session.getStringEncoder(context).generate(context, object, buffer);
+        }
     }
 
     private static class FragmentHandler extends Handler<IRubyObject> {
