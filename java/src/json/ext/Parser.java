@@ -634,7 +634,7 @@ public class Parser extends RubyObject {
                 }
 
                 if (exponent_digits >= 20 || Long.compareUnsigned(abs_exponent, Long.MAX_VALUE) > 0) {
-                    exponent = negative_exponent ? Long.MIN_VALUE : Long.MAX_VALUE;
+                    exponent = negative_exponent ? Integer.MIN_VALUE : Integer.MAX_VALUE;
                 } else {
                     exponent = negative_exponent ? -abs_exponent : abs_exponent;
                 }
@@ -655,8 +655,8 @@ public class Parser extends RubyObject {
 
         IRubyObject decodeFloat(ThreadContext context, long mantissa, int mantissa_digits, long exponent, boolean negative, int start) {
             if (config.decimalClass != null) return config.decimalFactory.apply(context, absSubSequence(start, cursor));
-            if (exponent > Integer.MAX_VALUE) return getConstant(negative ? CONST_MINUS_INFINITY : CONST_INFINITY);
-            if (exponent < Integer.MIN_VALUE) return RubyFloat.newFloat(context.runtime, negative ? -0.0 : 0.0);
+            if (exponent >= Integer.MAX_VALUE) return getConstant(negative ? CONST_MINUS_INFINITY : CONST_INFINITY);
+            if (exponent <= Integer.MIN_VALUE) return RubyFloat.newFloat(context.runtime, negative ? -0.0 : 0.0);
 
             // Ryu has rounding issues with subnormals around 1e-310 (< 2.225e-308)
             if (mantissa_digits > 17 || mantissa_digits + exponent < -307) {
