@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json/version'
+require 'json/unicode_subset'
 
 module JSON
   module ParserOptions # :nodoc:

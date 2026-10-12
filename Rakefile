@@ -167,6 +167,7 @@ if defined?(RUBY_ENGINE) and RUBY_ENGINE == 'jruby'
       parser_classes = FileList[
         "json/ext/ByteList*.class",
         "json/ext/OptionsReader*.class",
+        "json/ext/UnicodeSubset*.class",
         "json/ext/Parser*.class",
         "json/ext/Ryu*.class",
         "json/ext/RuntimeInfo*.class",
@@ -187,6 +188,7 @@ if defined?(RUBY_ENGINE) and RUBY_ENGINE == 'jruby'
       generator_classes = FileList[
         "json/ext/*ByteList*.class",
         "json/ext/OptionsReader*.class",
+        "json/ext/UnicodeSubset*.class",
         "json/ext/EscapeScanner*.class",
         "json/ext/Generator*.class",
         "json/ext/RuntimeInfo*.class",
