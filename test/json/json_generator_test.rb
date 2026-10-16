@@ -1316,6 +1316,24 @@ class JSONGeneratorTest < Test::Unit::TestCase
     assert_equal '{"1":1,"b":2}', JSON.generate({ 'b' => 2, 1 => 1 }, options.merge(strict: false))
   end
 
+  def test_rfc8785_non_utf8_string_keys
+    # String keys that are not UTF-8 are invalid; see #1108.
+    latin1 = "\xE9".dup.force_encoding(Encoding::ISO_8859_1)
+    [
+      { latin1 => 1 },
+      { latin1 => 1, "\u00e9" => 2 },
+      { "\xC3\xA9".b => 1 },
+      { "\u00e9".encode(Encoding::UTF_16LE) => 1 },
+      { "\xFF".dup.force_encoding(Encoding::UTF_8) => 1 },
+    ].each do |hash|
+      assert_raise(JSON::GeneratorError, hash.keys.inspect) { JSON.generate(hash, rfc8785: true) }
+    end
+
+    assert_rfc8785 '{"a":1}', { 'a'.b => 1 }
+    assert_rfc8785 '{"a":1}', { 'a'.encode(Encoding::US_ASCII) => 1 }
+    assert_rfc8785 "{\"\u00e9\":1}", { :"\u00e9" => 1 }
+  end
+
   def test_rfc8785_key_order_with_default_external_encoding
     # https://www.rfc-editor.org/rfc/rfc8785.html#section-3.2.3
     hash = { "\u20ac" => 1, "\r" => 2, "\ufb33" => 3, '1' => 4,
