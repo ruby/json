@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* Fix `JSON::ParserError#json_path` raising `NoMethodError` when the document was parsed with `symbolize_names: true`.
+
 ### 2026-10-13 (3.1.0)
 
 * Added `rfc8785` generator option to canonicalize the output. Replaces the `json-canonicalization` with numerous correctness fixes.
