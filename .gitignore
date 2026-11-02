@@ -23,3 +23,5 @@ Gemfile.lock
 *.log
 /tmp
 /doc/
+config.bat
+node_modules
