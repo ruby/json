@@ -7,6 +7,7 @@
 
 #ifndef HAVE_RB_LEN_T
 typedef long rb_len_t;
+# define FIX2LEN FIX2LONG
 # define LEN2NUM LONG2NUM
 # define PRIdLEN "ld"
 #endif
