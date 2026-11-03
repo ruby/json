@@ -1,6 +1,7 @@
 # JSON implementation for Ruby
 
 [![CI](https://github.com/ruby/json/actions/workflows/ci.yml/badge.svg)](https://github.com/ruby/json/actions/workflows/ci.yml)
+[![Duel](https://raw.githubusercontent.com/ruby/json/duel/badge/badge.svg)](https://github.com/sferik/duel-ruby)
 
 ## Description
 
