@@ -164,7 +164,10 @@ public class Parser extends RubyObject {
      */
     @JRubyMethod
     public IRubyObject parse(ThreadContext context, IRubyObject source) {
-        return new ParserSession(this, convertEncoding(context, source.convertToString()), info).parse(context);
+        // Like rb_str_new_frozen in parser.c: the caller's string becomes shared, so mutating it during parsing
+        // (e.g. from a decimal_class callback) copies its bytes instead of changing the ones being parsed.
+        RubyString frozenSource = convertEncoding(context, source.convertToString()).newFrozen();
+        return new ParserSession(this, frozenSource, info).parse(context);
     }
 
     private RubyFloat createFloat(final ThreadContext context, final ByteList num) {
