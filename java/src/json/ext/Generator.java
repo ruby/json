@@ -713,12 +713,21 @@ public final class Generator {
 
             if (state.strict() && !encoder.hasValidEncoding(object) && state.getAsJSON() != null) {
                 IRubyObject value = state.getAsJSON().call(context, object, context.getRuntime().getFalse());
-                if (value instanceof RubyString) {
+                if (value != object) {
+                    // C: convert_invalid_encoding. as_json is only called once, so a new
+                    // string that is still invalid raises instead of calling it again.
+                    if (value instanceof RubySymbol) {
+                        value = ((RubySymbol) value).asString();
+                    }
+                    if (!(value instanceof RubyString)) {
+                        Handler handler = getHandlerFor(context.runtime, value);
+                        handler.generate(context, session, value, buffer);
+                        return;
+                    }
+                    if (!encoder.hasValidEncoding((RubyString) value)) {
+                        throw Utils.buildGeneratorError(context, object, "source sequence is illegal/malformed utf-8").toThrowable();
+                    }
                     object = (RubyString)value;
-                } else {
-                    Handler handler = getHandlerFor(context.runtime, value);
-                    handler.generate(context, session, value, buffer);
-                    return;
                 }
             }
             generateString(context, session, object, buffer);
