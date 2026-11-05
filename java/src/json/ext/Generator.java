@@ -631,7 +631,14 @@ public final class Generator {
             if (keyClass == runtime.getString()) {
                 return key;
             } else {
-                return key.callMethod(context, "to_s");
+                // C: convert_string_subclass
+                IRubyObject keyStr = key.callMethod(context, "to_s");
+                if (!(keyStr instanceof RubyString)) {
+                    IRubyObject className = keyClass.getRealClass().callMethod(context, "to_s");
+                    throw runtime.newTypeError("can't convert " + className + " to String (" +
+                            className + "#to_s gives " + keyStr.getMetaClass().getRealClass().callMethod(context, "to_s") + ")");
+                }
+                return keyStr;
             }
         } else if (keyClass == runtime.getSymbol()) {
             return ((RubySymbol) key).id2name(context);
