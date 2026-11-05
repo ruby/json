@@ -5,7 +5,6 @@
  */
 package json.ext;
 
-import org.jruby.exceptions.RaiseException;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.util.ByteList;
 
@@ -19,10 +18,31 @@ import java.nio.ByteBuffer;
  */
 final class StringDecoder extends ByteListTranscoder {
     /**
-     * Stores the offset of the high surrogate when reading a surrogate pair,
-     * or -1 when not.
+     * A decoding error, with the offset in the source ByteList (relative to
+     * its begin) that the parser reports as the error's line and column.
      */
-    private int surrogatePairStart = -1;
+    static final class DecodeError extends RuntimeException {
+        final ByteList message;
+        final int offset;
+
+        DecodeError(ByteList message, int offset) {
+            super(null, null, false, false);
+            this.message = message;
+            this.offset = offset;
+        }
+    }
+
+    /**
+     * Stores the offset of the backslash that starts the escape sequence
+     * being read, or -1 when not in one.
+     */
+    private int escapeStart = -1;
+
+    /**
+     * Stores the offset where the text after the last escape sequence (or the
+     * string) starts. The C parser reports surrogate errors there.
+     */
+    private int segmentStart;
     private boolean allowControlCharacters = false;
     private boolean allowInvalidEscape = false;
 
@@ -42,6 +62,8 @@ final class StringDecoder extends ByteListTranscoder {
         try {
             init(src, start, end);
             this.out = new ByteList(end - start);
+            escapeStart = -1;
+            segmentStart = start;
             while (hasNext()) {
                 handleChar(context, readUtf8Char(context));
             }
@@ -58,6 +80,8 @@ final class StringDecoder extends ByteListTranscoder {
         try {
             init(src, start, end);
             this.out = new ByteList(end - start);
+            escapeStart = -1;
+            segmentStart = start;
             final byte[] data = src.unsafeBytes();
             final int base = src.begin();
             final int absEnd = base + srcEnd;
@@ -114,8 +138,9 @@ final class StringDecoder extends ByteListTranscoder {
     }
 
     private void handleEscapeSequence(ThreadContext context) throws IOException {
+        escapeStart = charStart;
         ensureMin(context, 1);
-        int character = readUtf8Char(context);
+        int character = super.readUtf8Char(context);
         switch (character) {
         case 'b':
             append('\b');
@@ -148,18 +173,23 @@ final class StringDecoder extends ByteListTranscoder {
                 handleLowSurrogate(context, (char)cp);
             } else if (Character.isLowSurrogate((char)cp)) {
                 // low surrogate with no high surrogate
-                throw invalidUtf8(context);
+                throw invalidSurrogate();
             } else {
                 writeUtf8Char(cp);
             }
             break;
         default:
+            if (character < 0x20 && !allowControlCharacters) {
+                throw invalidControlChar(context, escapeStart);
+            }
             if (allowInvalidEscape) {
               writeUtf8Char(character);
             } else {
               throw invalidEscape(context);
             }
         }
+        escapeStart = -1;
+        segmentStart = pos;
     }
 
     protected void append(int b) throws IOException {
@@ -171,22 +201,20 @@ final class StringDecoder extends ByteListTranscoder {
     }
 
     private void handleLowSurrogate(ThreadContext context, char highSurrogate) throws IOException {
-        surrogatePairStart = charStart;
-        ensureMin(context, 1);
+        if (pos + 1 > srcEnd) throw invalidSurrogate();
         int lowSurrogate = readUtf8Char(context);
 
         if (lowSurrogate == '\\') {
-            ensureMin(context, 5);
-            if (readUtf8Char(context) != 'u') throw invalidUtf8(context);
+            if (pos + 5 > srcEnd) throw invalidSurrogate();
+            if (readUtf8Char(context) != 'u') throw invalidSurrogate();
             lowSurrogate = readHex(context);
         }
 
         if (Character.isLowSurrogate((char)lowSurrogate)) {
             writeUtf8Char(Character.toCodePoint(highSurrogate,
                                                 (char)lowSurrogate));
-            surrogatePairStart = -1;
         } else {
-            throw invalidUtf8(context);
+            throw invalidSurrogate();
         }
     }
 
@@ -239,40 +267,41 @@ final class StringDecoder extends ByteListTranscoder {
         return result;
     }
 
+    // The offsets follow the C parser: errors in an escape sequence are
+    // reported at its backslash, surrogate errors at the text before it, and
+    // raw control characters where they are. The message prefixes are unchanged.
+
     @Override
-    protected RaiseException invalidUtf8(ThreadContext context) {
-        ByteList message = new ByteList(
-                ByteList.plain("partial character in source, " +
-                               "but hit end near "));
-        int start = surrogatePairStart != -1 ? surrogatePairStart : charStart;
-        message.append(src, start, srcEnd - start);
-        return Utils.newException(context, Utils.M_PARSER_ERROR,
-                                  context.runtime.newString(message));
+    protected DecodeError invalidUtf8(ThreadContext context) {
+        int start = escapeStart != -1 ? escapeStart : charStart;
+        return error("partial character in source, but hit end near ", start, start);
     }
 
-    protected RaiseException invalidControlChar(ThreadContext context) {
-        ByteList message = new ByteList(
-                ByteList.plain("invalid ASCII control character in string: "));
-        message.append(src, charStart, srcEnd - charStart);
-        return Utils.newException(context, Utils.M_PARSER_ERROR,
-                                  context.runtime.newString(message));
+    protected DecodeError invalidControlChar(ThreadContext context) {
+        return invalidControlChar(context, charStart);
     }
 
-    protected RaiseException invalidEscape(ThreadContext context) {
-        ByteList message = new ByteList(
-                ByteList.plain("invalid escape character in string: "));
-        message.append(src, charStart, srcEnd - charStart);
-        return Utils.newException(context, Utils.M_PARSER_ERROR,
-                                  context.runtime.newString(message));
+    private DecodeError invalidControlChar(ThreadContext context, int offset) {
+        return error("invalid ASCII control character in string: ", charStart, offset);
     }
 
-    protected RaiseException invalidUnicodeEscape(ThreadContext context, int escapeStart) {
-        ByteList message = new ByteList(
-                ByteList.plain("incomplete unicode character escape sequence at "));
+    private DecodeError invalidSurrogate() {
+        return error("partial character in source, but hit end near ", segmentStart, segmentStart);
+    }
+
+    protected DecodeError invalidEscape(ThreadContext context) {
+        return error("invalid escape character in string: ", charStart, escapeStart);
+    }
+
+    protected DecodeError invalidUnicodeEscape(ThreadContext context, int numberStart) {
         // Point at the backslash-u that introduced the escape.
-        int start = Math.max(escapeStart - 2, 0);
-        message.append(src, start, srcEnd - start);
-        return Utils.newException(context, Utils.M_PARSER_ERROR,
-                                  context.runtime.newString(message));
+        int start = Math.max(numberStart - 2, 0);
+        return error("incomplete unicode character escape sequence at ", start, start);
+    }
+
+    private DecodeError error(String prefix, int snippetStart, int offset) {
+        ByteList message = new ByteList(ByteList.plain(prefix));
+        message.append(src, snippetStart, srcEnd - snippetStart);
+        return new DecodeError(message, offset);
     }
 }

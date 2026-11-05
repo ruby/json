@@ -156,9 +156,9 @@ abstract class ByteListTranscoder {
     protected abstract void append(byte[] origin, int start, int length) throws IOException;
 
 
-    protected abstract RaiseException invalidUtf8(ThreadContext context);
+    protected abstract RuntimeException invalidUtf8(ThreadContext context);
 
-    protected RaiseException incompleteUtf8(ThreadContext context) {
+    protected RuntimeException incompleteUtf8(ThreadContext context) {
         return invalidUtf8(context);
     }
 }
