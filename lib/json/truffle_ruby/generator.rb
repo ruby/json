@@ -451,7 +451,11 @@ module JSON
             end
             obj.each_pair do |k,v|
               if first
-                key_type = k.class
+                if ::String == k.class || ::Symbol == k.class
+                  key_type = k.class
+                else
+                  JSON.send(:on_mixed_keys_hash, obj)
+                end
               else
                 if key_type && !@allow_duplicate_key && key_type != k.class
                   key_type = nil # stop checking
@@ -592,7 +596,11 @@ module JSON
 
             hash.each { |key, value|
               if first
-                key_type = key.class
+                if ::String == key.class || ::Symbol == key.class
+                  key_type = key.class
+                else
+                  JSON.send(:on_mixed_keys_hash, hash)
+                end
               else
                 if key_type && !state.allow_duplicate_key? && key_type != key.class
                   key_type = nil # stop checking

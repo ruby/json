@@ -3,6 +3,7 @@
 ### Unreleased
 
 * Fix `JSON::ParserError#json_path` raising `NoMethodError` when the document was parsed with `symbolize_names: true`.
+* Fix `JSON.generate` not detecting duplicate keys such as `{ "1" => 1, 1 => 2 }`.
 
 ### 2026-10-13 (3.1.0)
 
