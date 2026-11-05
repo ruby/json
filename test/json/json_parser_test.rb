@@ -948,13 +948,26 @@ class JSONParserTest < Test::Unit::TestCase
   end
 
   def test_parse_error_position_at_newline
-    omit "JRuby string decoding errors don't contain positions" if RUBY_ENGINE == "jruby"
-
     ["[1,\n\"ab\ncd\"]", "[1,\n\"日本\ncd\"]"].each do |json|
       error = assert_raise(JSON::ParserError) { JSON.parse(json) }
       assert_equal 2, error.line
       assert_equal 4, error.column
       assert_include error.message, 'at line 2 column 4'
+    end
+  end
+
+  def test_parse_error_position_in_string_escapes
+    {
+      %([1,\n"\\q"]) => [2, 2],
+      %([1,\n"ab\\u12"]) => [2, 4],
+      %([1,\n"\\u12\n4"]) => [2, 6],
+      %([1,\n"ab\\ud800x"]) => [2, 2],
+      %([1,\n"x\\n\\udc00"]) => [2, 5],
+      %(["日本\\q"]) => [1, 5],
+    }.each do |json, (line, column)|
+      error = assert_raise(JSON::ParserError) { JSON.parse(json) }
+      assert_equal [line, column], [error.line, error.column], json.inspect
+      assert_include error.message, "at line #{line} column #{column}"
     end
   end
 

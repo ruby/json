@@ -732,13 +732,15 @@ public class Parser extends RubyObject {
         }
 
         private ByteList decodeString(ThreadContext context, ByteList byteList, int start, int end, boolean isAscii) {
-            if (isAscii) {
-                return decoder.decodeNoValidate(context, byteList, start, end, chunks);
+            try {
+                if (isAscii || !validateUTF8Strings) {
+                    return decoder.decodeNoValidate(context, byteList, start, end, chunks);
+                }
+                return decoder.decode(context, byteList, start, end);
+            } catch (StringDecoder.DecodeError e) {
+                cursor = begin + e.offset;
+                throw parseError(context.runtime.newString(e.message), null);
             }
-            if (!validateUTF8Strings) {
-                return decoder.decodeNoValidate(context, byteList, start, end, chunks);
-            }
-            return decoder.decode(context, byteList, start, end);
         }
 
         private static boolean isLetter(byte b) {

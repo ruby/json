@@ -5,6 +5,7 @@
 * Fix `JSON::ParserError#json_path` raising `NoMethodError` when the document was parsed with `symbolize_names: true`.
 * Fix `JSON.generate` not detecting duplicate keys such as `{ "1" => 1, 1 => 2 }`.
 * JRuby: raise `TypeError` when a String subclass used as a Hash key has a `to_s` that doesn't return a String, like the C extension.
+* JRuby: parser errors raised while decoding a string, such as an invalid escape or a raw control character, now include the position (`line`, `column` and the message suffix) and `json_path`, matching the C extension.
 
 ### 2026-10-13 (3.1.0)
 
