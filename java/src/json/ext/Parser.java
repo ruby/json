@@ -195,6 +195,7 @@ public class Parser extends RubyObject {
     private static final class ParserSession {
         private static final int INITIAL_FRAME_CAPACITY = 32;
         private static final int INITIAL_VALUE_CAPACITY = 64;
+        private static final int PARSE_ERROR_FRAGMENT_LEN = 32;
 
         // Integers with fewer than this many digits are built directly from a
         // long accumulated during the digit scan; longer ones fall back to
@@ -304,7 +305,7 @@ public class Parser extends RubyObject {
             // Only trailing whitespace (and comments) may follow the document.
             eatWhitespace();
             if (cursor < end) {
-                throw unexpectedToken(cursor, end);
+                throw parsingError("unexpected token at end of stream ", cursor, end);
             }
             return result;
         }
@@ -392,7 +393,7 @@ public class Parser extends RubyObject {
                             case 0:
                                 throw parseError("unexpected end of input");
                             default:
-                                throw unexpectedToken(cursor, end);
+                                throw parsingError("unexpected character: ", cursor, end);
                         }
 
                         pushValue(value);
@@ -958,16 +959,36 @@ public class Parser extends RubyObject {
             return error;
         }
 
-        private RaiseException parsingError(int absStart, int absEnd) {
+        private RaiseException parsingError(String prefix, int absStart, int absEnd) {
             cursor = absStart;
-            RubyString msg = context.runtime.newString("unexpected token at '")
-                    .cat(data, absStart, Math.min(absEnd - absStart, 32))
-                    .cat((byte)'\'');
+            RubyString msg = context.runtime.newString(prefix);
+            if (absStart >= absEnd) {
+                msg.catString("EOF");
+                return parseError(msg, null);
+            }
+
+            // Like the C parser, quote the source up to the next whitespace,
+            // at most PARSE_ERROR_FRAGMENT_LEN bytes.
+            int len = 0;
+            while (len < PARSE_ERROR_FRAGMENT_LEN && absStart + len < absEnd) {
+                byte b = data[absStart + len];
+                if (b == 0 || b == '\n' || b == ' ' || b == '\t' || b == '\r') {
+                    break;
+                }
+                len++;
+            }
+            if (len == PARSE_ERROR_FRAGMENT_LEN) {
+                // Only trim when the byte limit splits a multibyte character.
+                while (len > 0 && absStart + len < absEnd && (data[absStart + len] & 0xC0) == 0x80) {
+                    len--;
+                }
+            }
+            msg.cat((byte)'\'').cat(data, absStart, len).cat((byte)'\'');
             return parseError(msg, null);
         }
 
         private RaiseException unexpectedToken(int absStart, int absEnd) {
-            return parsingError(absStart, absEnd);
+            return parsingError("unexpected token ", absStart, absEnd);
         }
 
         private RaiseException newException(String className, String message) {
