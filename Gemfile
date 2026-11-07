@@ -11,6 +11,10 @@ group :development do
   gem "test-unit-ruby-core"
   gem "simplecov", require: false
 
+  # Duel requires Ruby 3.4 or later
+  gem "duel", ">= 0.1.4" if RUBY_VERSION >= "3.4"
+  gem "stackprof", platforms: :mri
+
   if RUBY_VERSION < "3.1."
     # Ref: https://github.com/test-unit/test-unit/pull/329
     gem 'power_assert', '< 3.0.0'

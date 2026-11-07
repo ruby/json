@@ -258,3 +258,13 @@ end
 
 desc "Compile in the the source directory"
 task default: [ :clean, :test ]
+
+# Duel runs in a process of its own: it requires json, which would load
+# an installed json here, before this tree's is compiled. It requires Ruby
+# 3.4 or later.
+if Gem::Specification.find_all_by_name("duel").any?
+  desc "Compare the benchmarks in duel/ with the main branch's"
+  task :duel do
+    ruby "-S", "duel"
+  end
+end
