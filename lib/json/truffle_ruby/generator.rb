@@ -791,9 +791,18 @@ module JSON
 
             if state.strict? && state.as_json
               unless Generator.valid_encoding?(string)
-                string = state.as_json.call(string, false)
-                unless string.is_a?(::String)
-                  return string.to_json(state, *args)
+                coerced = state.as_json.call(string, false)
+                unless coerced.equal?(string)
+                  # as_json is only called once, so a new string that is still
+                  # invalid raises instead of calling it again.
+                  coerced = coerced.name if coerced.is_a?(::Symbol)
+                  unless coerced.is_a?(::String)
+                    return coerced.to_json(state, *args)
+                  end
+                  unless Generator.valid_encoding?(coerced)
+                    raise GeneratorError.new("source sequence is illegal/malformed utf-8", self)
+                  end
+                  string = coerced
                 end
               end
             end
