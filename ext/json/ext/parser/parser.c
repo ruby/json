@@ -1075,7 +1075,14 @@ NOINLINE(static) VALUE json_string_unescape(JSON_ParserState *state, JSON_Parser
       MEMCPY(buffer, p, char, stringEnd - p);
       buffer += stringEnd - p;
     }
-    rb_str_set_len(result, buffer - bufferStart);
+    // The buffer was sized for the raw (escaped) input, but the unescaped
+    // content can be much shorter (e.g. \uXXXX escapes: 6 raw bytes per at
+    // most 4 output bytes, 12 for a surrogate pair).  rb_str_set_len would
+    // leave the raw size as capacity for the string's whole lifetime;
+    // rb_str_resize shrinks oversized buffers (embedding short strings and
+    // reallocating large ones to the exact length), so parsed strings only
+    // retain the bytes they actually hold.
+    rb_str_resize(result, (rb_len_t)(buffer - bufferStart));
 
     if (symbolize) {
         result = rb_str_intern(result);
