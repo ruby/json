@@ -11,6 +11,10 @@ ext/json/ext/vendor/fpconv.h::
   This file is adapted from https://github.com/night-shift/fpconv
   It is licensed under Boost Software License 1.0.
 
+java/src/json/ext/FpConv.java::
+  This file is translated from ext/json/ext/vendor/fpconv.c, adapted from https://github.com/night-shift/fpconv
+  It is licensed under Boost Software License 1.0.
+
 ext/json/ext/vendor/jeaiii-ltoa.h::
   This file is adapted from https://github.com/jeaiii/itoa
   It is licensed under the MIT License

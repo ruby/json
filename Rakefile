@@ -188,6 +188,7 @@ if defined?(RUBY_ENGINE) and RUBY_ENGINE == 'jruby'
         "json/ext/*ByteList*.class",
         "json/ext/OptionsReader*.class",
         "json/ext/EscapeScanner*.class",
+        "json/ext/FpConv*.class",
         "json/ext/Generator*.class",
         "json/ext/RuntimeInfo*.class",
         "json/ext/*StringEncoder*.class",
