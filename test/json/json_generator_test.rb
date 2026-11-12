@@ -1160,13 +1160,17 @@ class JSONGeneratorTest < Test::Unit::TestCase
     assert_float_roundtrip "100.0", 100.0
     assert_float_roundtrip "1000.0", 1000.0
 
-    if RUBY_ENGINE == "jruby"
-      assert_float_roundtrip "1.7468619377842371E9", 1746861937.7842371
-    else
-      assert_float_roundtrip "1746861937.7842371", 1746861937.7842371
-    end
+    assert_float_roundtrip "1746861937.7842371", 1746861937.7842371
 
-    if RUBY_ENGINE == "ruby"
+    # TruffleRuby generates floats with Float#to_s.
+    unless RUBY_ENGINE == "truffleruby"
+      assert_float_roundtrip "-0.0", -0.0
+      assert_float_roundtrip "12345678.12345679", 12345678.12345679
+      assert_float_roundtrip "0.0001", 0.0001
+      assert_float_roundtrip "1e+22", 1e+22
+      assert_float_roundtrip "5e-324", 5e-324
+      assert_float_roundtrip "1.7976931348623157e+308", Float::MAX
+
       assert_float_roundtrip "100000000000000.0", 100000000000000.0
       assert_float_roundtrip "1e+15", 1e+15
       assert_float_roundtrip "-100000000000000.0", -100000000000000.0

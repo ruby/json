@@ -217,6 +217,7 @@ public final class Generator {
         private RuntimeInfo info;
         private StringEncoder stringEncoder;
         private byte[] charBytes;
+        private byte[] floatBytes;
 
         Session(GeneratorState state) {
             this.state = state;
@@ -243,6 +244,12 @@ public final class Generator {
             byte[] charBytes = this.charBytes;
             if (charBytes == null) charBytes = this.charBytes = new byte[MAX_LONG_CHARS];
             return charBytes;
+        }
+
+        public byte[] getFloatBytes() {
+            byte[] floatBytes = this.floatBytes;
+            if (floatBytes == null) floatBytes = this.floatBytes = new byte[FpConv.BUFFER_SIZE];
+            return floatBytes;
         }
 
         public StringEncoder getStringEncoder(ThreadContext context) {
@@ -432,8 +439,11 @@ public final class Generator {
 
         if (state.rfc8785()) {
             generateRfc8785Number(context, object, buffer);
-        } else {
+        } else if (Double.isInfinite(value) || Double.isNaN(value)) {
             buffer.write(Double.toString(value).getBytes(UTF_8));
+        } else {
+            byte[] floatBytes = session.getFloatBytes();
+            buffer.write(floatBytes, 0, FpConv.dtoa(value, floatBytes));
         }
     }
 
