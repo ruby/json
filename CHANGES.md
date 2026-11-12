@@ -6,6 +6,7 @@
 * Fix `JSON.generate` not detecting duplicate keys such as `{ "1" => 1, 1 => 2 }`.
 * JRuby: raise `TypeError` when a String subclass used as a Hash key has a `to_s` that doesn't return a String, like the C extension.
 * JRuby and TruffleRuby: fix a stack overflow in `JSON::Coder` when `as_json` returns a Symbol for a string with invalid encoding.
+* JRuby: fix `JSON::Coder` (and any frozen `JSON::State`) not being thread-safe. Each `#dump` call now uses its own nesting depth instead of mutating the shared state, which under concurrent use could make every later call raise `JSON::NestingError`.
 
 ### 2026-10-13 (3.1.0)
 

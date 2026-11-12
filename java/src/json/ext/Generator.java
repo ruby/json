@@ -54,8 +54,9 @@ public final class Generator {
     }
 
     static <T extends IRubyObject> RubyString generateJson(ThreadContext context, T object, Handler<? super T> handler, IRubyObject arg0) {
-        Session session = new Session(arg0);
-        GeneratorState state = session.getState(context);
+        GeneratorState state = GeneratorState.fromState(context, arg0 == null || arg0.isNil() ? null : arg0)
+                .forGeneration(context);
+        Session session = new Session(state);
         state.validateRfc8785(context);
         int depth = state.depth;
         try {
@@ -86,8 +87,8 @@ public final class Generator {
     public static <T extends IRubyObject> IRubyObject
             generateJson(ThreadContext context, T object,
                          GeneratorState config, IRubyObject io) {
-        Session session = new Session(config);
-        GeneratorState state = session.getState(context);
+        GeneratorState state = config.forGeneration(context);
+        Session session = new Session(state);
         state.validateRfc8785(context);
         int depth = state.depth;
 

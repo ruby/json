@@ -666,6 +666,20 @@ public class GeneratorState extends RubyObject {
         return result;
     }
 
+    /**
+     * Returns the state to mutate while generating a single document.
+     *
+     * <p>A frozen state (such as the one held by <code>JSON::Coder</code>) may be
+     * shared by concurrent calls, so generating with it must not touch its
+     * <code>depth</code>. In that case a private, unfrozen copy is returned.
+     */
+    GeneratorState forGeneration(ThreadContext context) {
+        if (!isFrozen()) return this;
+        GeneratorState copy = new GeneratorState(context.runtime, getMetaClass());
+        copy.initialize_copy(context, this);
+        return copy;
+    }
+
     public int increaseDepth(ThreadContext context) {
         checkMaxNesting(context);
         return ++depth;
