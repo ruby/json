@@ -113,8 +113,15 @@ class StringEncoder extends ByteListTranscoder {
     };
 
     private static final ByteBuffer HTML_COMMENT = ByteBuffer.wrap("<!--".getBytes(StandardCharsets.US_ASCII));
-    private static final ByteBuffer HTML_SCRIPT_OPEN = ByteBuffer.wrap("<script".getBytes(StandardCharsets.US_ASCII));
-    private static final ByteBuffer HTML_SCRIPT_CLOSE = ByteBuffer.wrap("</script".getBytes(StandardCharsets.US_ASCII));
+    private static final byte[] HTML_SCRIPT_TAG_NAME = "script".getBytes(StandardCharsets.US_ASCII);
+
+    // HTML tag names are ASCII case-insensitive.
+    private static boolean isScriptTagName(byte[] bytes, int offset) {
+        for (int i = 0; i < HTML_SCRIPT_TAG_NAME.length; i++) {
+            if ((bytes[offset + i] | 0x20) != HTML_SCRIPT_TAG_NAME[i]) return false;
+        }
+        return true;
+    }
 
     protected final byte[] escapeTable;
 
@@ -309,9 +316,9 @@ class StringEncoder extends ByteListTranscoder {
                         if (remaining > 8) remaining = 8;
 
                         if (
-                          (remaining >= 4 && ByteBuffer.wrap(ptrBytes, pos, 4).equals(HTML_COMMENT)) ||
-                          (remaining >= 7 && ByteBuffer.wrap(ptrBytes, pos, 7).equals(HTML_SCRIPT_OPEN)) ||
-                          (remaining >= 8 && ByteBuffer.wrap(ptrBytes, pos, 8).equals(HTML_SCRIPT_CLOSE))
+                          (remaining >= 4 && ByteBuffer.wrap(ptrBytes, ptr + pos, 4).equals(HTML_COMMENT)) ||
+                          (remaining >= 7 && isScriptTagName(ptrBytes, ptr + pos + 1)) ||
+                          (remaining >= 8 && ptrBytes[ptr + pos + 1] == '/' && isScriptTagName(ptrBytes, ptr + pos + 2))
                         ) {
                           beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
                           escapeAscii(ch, scratch, hexdig);

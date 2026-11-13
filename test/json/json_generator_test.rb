@@ -763,6 +763,24 @@ class JSONGeneratorTest < Test::Unit::TestCase
     assert_equal json, generate(data, script_safe: true)
   end
 
+  def test_script_safe_case_insensitive
+    {
+      '<SCRIPT>' => '"\\u003cSCRIPT>"',
+      '</ScRiPt>' => '"\\u003c/ScRiPt>"',
+      'a</SCRIPT' => '"a\\u003c/SCRIPT"',
+      'a</SCRIP' => '"a</SCRIP"',
+      "<\u017Fcript>" => %("<\u017Fcript>"),
+    }.each do |data, json|
+      assert_equal json, generate(data, script_safe: true)
+    end
+  end
+
+  def test_script_safe_substring
+    data = ('a' * 100 + '</script><!--<SCRIPT>')[100..]
+    json = '"\\u003c/script>\\u003c!--\\u003cSCRIPT>"'
+    assert_equal json, generate(data, script_safe: true)
+  end
+
   def test_backslash
     data = [ '\\.(?i:gif|jpe?g|png)$' ]
     json = '["\\\\.(?i:gif|jpe?g|png)$"]'

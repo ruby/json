@@ -536,6 +536,17 @@ static const unsigned char script_safe_escape_table[256] = {
      4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 9, 9,
 };
 
+static inline bool script_tag_name_p(const char *ptr)
+{
+    // HTML tag names are ASCII case-insensitive.
+    return (ptr[0] | 0x20) == 's' &&
+           (ptr[1] | 0x20) == 'c' &&
+           (ptr[2] | 0x20) == 'r' &&
+           (ptr[3] | 0x20) == 'i' &&
+           (ptr[4] | 0x20) == 'p' &&
+           (ptr[5] | 0x20) == 't';
+}
+
 static inline unsigned char search_script_safe_escape(search_state *search)
 {
     while (search->ptr < search->end) {
@@ -548,8 +559,8 @@ static inline unsigned char search_script_safe_escape(search_state *search)
                     size_t remaining = search->end - search->ptr;
                     if (!(
                         (remaining >= 4 && memcmp(search->ptr, "<!--", 4) == 0) ||
-                        (remaining >= 7 && memcmp(search->ptr, "<script", 7) == 0) ||
-                        (remaining >= 8 && memcmp(search->ptr, "</script", 8) == 0)
+                        (remaining >= 7 && script_tag_name_p(search->ptr + 1)) ||
+                        (remaining >= 8 && search->ptr[1] == '/' && script_tag_name_p(search->ptr + 2))
                     )) {
                         search->ptr += 1;
                         continue;
