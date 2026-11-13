@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+* The `script_safe: true` option of `JSON.generate` now longer escapes `U+2028` and `U+2029` given that Javascript is
+  now a proper subset of JSON since many years (see: https://github.com/tc39/proposal-json-superset).
 * Fix `JSON::ParserError#json_path` raising `NoMethodError` when the document was parsed with `symbolize_names: true`.
 * Fix `JSON.generate` not detecting duplicate keys such as `{ "1" => 1, 1 => 2 }`.
 * JRuby: raise `TypeError` when a String subclass used as a Hash key has a `to_s` that doesn't return a String, like the C extension.

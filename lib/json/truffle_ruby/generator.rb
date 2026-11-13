@@ -41,11 +41,9 @@ module JSON
 
       SCRIPT_SAFE_MAP = MAP.merge(
         '/'  =>  '\\/',
-        "\u2028" => '\u2028',
-        "\u2029" => '\u2029',
       ).freeze
 
-      SCRIPT_SAFE_ESCAPE_PATTERN = /[\/"\\\x0-\x1f\u2028-\u2029]/
+      SCRIPT_SAFE_ESCAPE_PATTERN = /[\/"\\\x0-\x1f]/
 
       def self.native_type?(value) # :nodoc:
         (false == value || true == value || nil == value || String === value || Symbol === value || Array === value || Hash === value || Integer === value || Float === value || Fragment === value)
