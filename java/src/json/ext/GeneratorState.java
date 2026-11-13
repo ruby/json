@@ -214,7 +214,7 @@ public class GeneratorState extends RubyObject {
      * thrown if these values are encountered.
      * This options defaults to <code>false</code>.
      * <dt><code>:script_safe</code>
-     * <dd>set to <code>true</code> if forward slashes should be escaped
+     * <dd>set to <code>true</code> if script tags and HTML comments should be escaped
      * in the json output to make it safe to include in a JavaScript tag (default: <code>false</code>)
      */
     @JRubyMethod(visibility=Visibility.PRIVATE)

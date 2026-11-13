@@ -39,11 +39,16 @@ module JSON
         '\\'  =>  '\\\\',
       }.freeze # :nodoc:
 
-      SCRIPT_SAFE_MAP = MAP.merge(
-        '/'  =>  '\\/',
-      ).freeze
+      ESCAPE_PATTERN = /["\\\x0-\x1f]/
 
-      SCRIPT_SAFE_ESCAPE_PATTERN = /[\/"\\\x0-\x1f]/
+      script_safe_extra = {
+        '<script' => '\\u003cscript',
+        '</script' => '\\u003c/script',
+        '<!--' => '\\u003c!--',
+      }
+      SCRIPT_SAFE_MAP = MAP.merge(script_safe_extra).freeze
+
+      SCRIPT_SAFE_ESCAPE_PATTERN = Regexp.union(ESCAPE_PATTERN, *script_safe_extra.keys)
 
       def self.native_type?(value) # :nodoc:
         (false == value || true == value || nil == value || String === value || Symbol === value || Array === value || Hash === value || Integer === value || Float === value || Fragment === value)
@@ -68,8 +73,8 @@ module JSON
             string
           end
         else
-          if /["\\\x0-\x1f]/.match?(string)
-            string.gsub(/["\\\x0-\x1f]/, MAP)
+          if ESCAPE_PATTERN.match?(string)
+            string.gsub(ESCAPE_PATTERN, MAP)
           else
             string
           end
@@ -77,9 +82,7 @@ module JSON
       end
 
       def self.utf8_to_json_ascii(original_string, script_safe = false) # :nodoc:
-        string = original_string.b
-        map = script_safe ? SCRIPT_SAFE_MAP : MAP
-        string.gsub!(/[\/"\\\x0-\x1f]/n) { map[$&] || $& }
+        string = utf8_to_json(original_string, script_safe).b
         string.gsub!(/(
           (?:
            [\xc2-\xdf][\x80-\xbf]    |
@@ -205,7 +208,7 @@ module JSON
         # the generated JSON, max_nesting = 0 if no maximum is checked.
         attr_accessor :max_nesting
 
-        # If this attribute is set to true, forward slashes will be escaped in
+        # If this attribute is set to true, script tags and HTML comments will be escaped in
         # all json strings.
         attr_accessor :script_safe
 
