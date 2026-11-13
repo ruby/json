@@ -252,6 +252,7 @@ public class GeneratorState extends RubyObject {
 
         this.allowDuplicateKey = orig.allowDuplicateKey;
         this.sortKeys = orig.sortKeys;
+        this.rfc8785 = orig.rfc8785;
 
         return this;
     }
