@@ -49,7 +49,8 @@ final class StringEncoderAsciiOnly extends StringEncoder {
 
             if (ch_len != 0) {
                 switch (ch_len) {
-                    case 9: {
+                    case 9:
+                    case 25: {
                         beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
                         escapeAscii(ch, scratch, hexdig);
                         break;
