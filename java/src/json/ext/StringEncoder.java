@@ -11,6 +11,7 @@ import java.io.OutputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
 
 import org.jcodings.Encoding;
 import org.jcodings.specific.USASCIIEncoding;
@@ -91,8 +92,8 @@ class StringEncoder extends ByteListTranscoder {
             9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
             9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
             // ASCII Characters
-            0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, // '"' and '/'
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // '"'
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,25, 0, 0, 0, // '<'
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, // '\\'
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -110,6 +111,10 @@ class StringEncoder extends ByteListTranscoder {
             //First byte of a 4+ byte code point
             4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 9, 9,
     };
+
+    private static final ByteBuffer HTML_COMMENT = ByteBuffer.wrap("<!--".getBytes(StandardCharsets.US_ASCII));
+    private static final ByteBuffer HTML_SCRIPT_OPEN = ByteBuffer.wrap("<script".getBytes(StandardCharsets.US_ASCII));
+    private static final ByteBuffer HTML_SCRIPT_CLOSE = ByteBuffer.wrap("</script".getBytes(StandardCharsets.US_ASCII));
 
     protected final byte[] escapeTable;
 
@@ -298,6 +303,22 @@ class StringEncoder extends ByteListTranscoder {
                         beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
                         escapeAscii(ch, scratch, hexdig);
                         break;
+                    }
+                    case 25: {
+                        int remaining = len - pos;
+                        if (remaining > 8) remaining = 8;
+
+                        if (
+                          (remaining >= 4 && ByteBuffer.wrap(ptrBytes, pos, 4).equals(HTML_COMMENT)) ||
+                          (remaining >= 7 && ByteBuffer.wrap(ptrBytes, pos, 7).equals(HTML_SCRIPT_OPEN)) ||
+                          (remaining >= 8 && ByteBuffer.wrap(ptrBytes, pos, 8).equals(HTML_SCRIPT_CLOSE))
+                        ) {
+                          beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                          escapeAscii(ch, scratch, hexdig);
+                          break;
+                        }
+                        ch_len = 1;
+                        // fallthrough
                     }
                     default:
                         pos += ch_len;
