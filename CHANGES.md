@@ -144,6 +144,11 @@ Numerous rarely used aliases have been removed.
 * Fix `allow_blank` parsing option to no longer allow invalid types (e.g. `load([], allow_blank: true)` now raise a type error).
 * Add `allow_invalid_escape` parsing option to ignore backslashes that aren't followed by one of the valid escape characters.
 
+### 2026-11-13 (2.18.3)
+
+* Backport handling of unescaped control characters preceeded by a backslash from 2.19.2.
+  GHSA-cjpr-jw2g-fw99.
+
 ### 2026-11-02 (2.18.2)
 
 * Backport handling of unescaped control characters preceeded by a backslash from 2.19.3.
