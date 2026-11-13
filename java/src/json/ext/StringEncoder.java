@@ -106,7 +106,7 @@ class StringEncoder extends ByteListTranscoder {
             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
             // First byte of a 3-byte code point
-            3, 3, 11, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // 0xE2 is the start of \u2028 and \u2029
+            3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // 0xE2 is the start of \u2028 and \u2029
             //First byte of a 4+ byte code point
             4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 9, 9,
     };
@@ -301,23 +301,6 @@ class StringEncoder extends ByteListTranscoder {
                         beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
                         escapeAscii(ch, scratch, hexdig);
                         break;
-                    }
-                    case 11: {
-                        int b2 = Byte.toUnsignedInt(ptrBytes[ptr + pos + 1]);
-                        if (b2 == 0x80) {
-                            int b3 = Byte.toUnsignedInt(ptrBytes[ptr + pos + 2]);
-                            if (b3 == 0xA8) {
-                                beg = pos = flushPos(pos, beg, ptrBytes, ptr, 3);
-                                append(BACKSLASH_U2028, 0, 6);
-                                break;
-                            } else if (b3 == 0xA9) {
-                                beg = pos = flushPos(pos, beg, ptrBytes, ptr, 3);
-                                append(BACKSLASH_U2029, 0, 6);
-                                break;
-                            }
-                        }
-                        ch_len = 3;
-                        // fallthrough
                     }
                     default:
                         pos += ch_len;
