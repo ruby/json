@@ -144,7 +144,7 @@ module JSON
         # * *space_before*: a string that is put before a : pair delimiter (default: ''),
         # * *object_nl*: a string that is put at the end of a JSON object (default: ''),
         # * *array_nl*: a string that is put at the end of a JSON array (default: ''),
-        # * *script_safe*: true if U+2028, U+2029 and forward slash (/) should be escaped
+        # * *script_safe*: true if forward slash (/) should be escaped
         #   as to make the JSON object safe to interpolate in a script tag (default: false).
         # * *check_circular*: is deprecated now, use the :max_nesting option instead,
         # * *max_nesting*: sets the maximum level of data structure nesting in

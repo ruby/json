@@ -38,7 +38,7 @@ class StringEncoder extends ByteListTranscoder {
     private static final byte[] BACKSLASH_N = {'\\', 'n'};
     private static final byte[] BACKSLASH_R = {'\\', 'r'};
     private static final byte[] BACKSLASH_T = {'\\', 't'};
-    
+
     static final byte[] ESCAPE_TABLE = {
             // ASCII Control Characters
             9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
@@ -106,13 +106,10 @@ class StringEncoder extends ByteListTranscoder {
             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
             // First byte of a 3-byte code point
-            3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // 0xE2 is the start of \u2028 and \u2029
+            3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
             //First byte of a 4+ byte code point
             4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 9, 9,
     };
-
-    private static final byte[] BACKSLASH_U2028 = "\\u2028".getBytes(StandardCharsets.US_ASCII);
-    private static final byte[] BACKSLASH_U2029 = "\\u2029".getBytes(StandardCharsets.US_ASCII);
 
     protected final byte[] escapeTable;
 
