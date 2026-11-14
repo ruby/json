@@ -274,6 +274,32 @@ class StringEncoder extends ByteListTranscoder {
         }
     }
 
+    private boolean isUnsafeScriptTag(byte[] ptrBytes, int pos, int len) {
+      int remaining = len - pos;
+
+      if ((remaining >= 4 && ByteBuffer.wrap(ptrBytes, pos, 4).equals(HTML_COMMENT))) {
+        return true;
+      }
+
+      pos++;
+      remaining--;
+
+      if (ptrBytes[pos] == '/') {
+        pos++;
+        remaining--;
+      }
+
+      return (
+          remaining >= 6 &&
+          (ptrBytes[pos + 0] | 0x20) == 's' &&
+          (ptrBytes[pos + 1] | 0x20) == 'c' &&
+          (ptrBytes[pos + 2] | 0x20) == 'r' &&
+          (ptrBytes[pos + 3] | 0x20) == 'i' &&
+          (ptrBytes[pos + 4] | 0x20) == 'p' &&
+          (ptrBytes[pos + 5] | 0x20) == 't'
+      );
+    }
+
     // C: convert_UTF8_to_JSON
     void encode(ByteList src) throws IOException {
         if (escapeTable == ESCAPE_TABLE) {
@@ -308,11 +334,7 @@ class StringEncoder extends ByteListTranscoder {
                         int remaining = len - pos;
                         if (remaining > 8) remaining = 8;
 
-                        if (
-                          (remaining >= 4 && ByteBuffer.wrap(ptrBytes, pos, 4).equals(HTML_COMMENT)) ||
-                          (remaining >= 7 && ByteBuffer.wrap(ptrBytes, pos, 7).equals(HTML_SCRIPT_OPEN)) ||
-                          (remaining >= 8 && ByteBuffer.wrap(ptrBytes, pos, 8).equals(HTML_SCRIPT_CLOSE))
-                        ) {
+                        if (isUnsafeScriptTag(ptrBytes, pos, len)) {
                           beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
                           escapeAscii(ch, scratch, hexdig);
                           break;

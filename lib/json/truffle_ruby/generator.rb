@@ -37,18 +37,12 @@ module JSON
         "\x1f" => '\u001f',
         '"'   =>  '\"',
         '\\'  =>  '\\\\',
+        '<' => '\\u003c',
       }.freeze # :nodoc:
 
       ESCAPE_PATTERN = /["\\\x0-\x1f]/
 
-      script_safe_extra = {
-        '<script' => '\\u003cscript',
-        '</script' => '\\u003c/script',
-        '<!--' => '\\u003c!--',
-      }
-      SCRIPT_SAFE_MAP = MAP.merge(script_safe_extra).freeze
-
-      SCRIPT_SAFE_ESCAPE_PATTERN = Regexp.union(ESCAPE_PATTERN, *script_safe_extra.keys)
+      SCRIPT_SAFE_ESCAPE_PATTERN = Regexp.union(ESCAPE_PATTERN, /<(?=\/?script)/i, /<(?=!--)/)
 
       def self.native_type?(value) # :nodoc:
         (false == value || true == value || nil == value || String === value || Symbol === value || Array === value || Hash === value || Integer === value || Float === value || Fragment === value)
@@ -66,18 +60,11 @@ module JSON
       # Convert a UTF8 encoded Ruby string _string_ to a JSON string, encoded with
       # UTF16 big endian characters as \u????, and return it.
       def self.utf8_to_json(string, script_safe = false) # :nodoc:
-        if script_safe
-          if SCRIPT_SAFE_ESCAPE_PATTERN.match?(string)
-            string.gsub(SCRIPT_SAFE_ESCAPE_PATTERN, SCRIPT_SAFE_MAP)
-          else
-            string
-          end
+        pattern = script_safe ? SCRIPT_SAFE_ESCAPE_PATTERN : ESCAPE_PATTERN
+        if pattern.match?(string)
+          string.gsub(pattern, MAP)
         else
-          if ESCAPE_PATTERN.match?(string)
-            string.gsub(ESCAPE_PATTERN, MAP)
-          else
-            string
-          end
+          string
         end
       end
 
