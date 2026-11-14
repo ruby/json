@@ -113,8 +113,7 @@ class StringEncoder extends ByteListTranscoder {
     };
 
     private static final ByteBuffer HTML_COMMENT = ByteBuffer.wrap("<!--".getBytes(StandardCharsets.US_ASCII));
-    private static final ByteBuffer HTML_SCRIPT_OPEN = ByteBuffer.wrap("<script".getBytes(StandardCharsets.US_ASCII));
-    private static final ByteBuffer HTML_SCRIPT_CLOSE = ByteBuffer.wrap("</script".getBytes(StandardCharsets.US_ASCII));
+    protected static final byte[] ESCAPED_LT = "\\u003c".getBytes(StandardCharsets.US_ASCII);
 
     protected final byte[] escapeTable;
 
@@ -274,7 +273,7 @@ class StringEncoder extends ByteListTranscoder {
         }
     }
 
-    private boolean isUnsafeScriptTag(byte[] ptrBytes, int pos, int len) {
+    protected boolean isUnsafeScriptTag(byte[] ptrBytes, int pos, int len) {
       int remaining = len - pos;
 
       if ((remaining >= 4 && ByteBuffer.wrap(ptrBytes, pos, 4).equals(HTML_COMMENT))) {
@@ -323,31 +322,27 @@ class StringEncoder extends ByteListTranscoder {
             int ch_len = escapeTable[ch];
             /* JSON encoding */
 
-            if (ch_len > 0) {
-                switch (ch_len) {
-                    case 9: {
+            switch (ch_len) {
+                case 0:
+                    pos++;
+                    break;
+                case 9: {
+                    beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                    escapeAscii(ch, scratch, hexdig);
+                    break;
+                }
+                case 25: {
+                    if (isUnsafeScriptTag(ptrBytes, pos, len)) {
                         beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
                         escapeAscii(ch, scratch, hexdig);
-                        break;
+                    } else {
+                        pos++; // nothing to escape, resume search.
                     }
-                    case 25: {
-                        int remaining = len - pos;
-                        if (remaining > 8) remaining = 8;
-
-                        if (isUnsafeScriptTag(ptrBytes, pos, len)) {
-                          beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
-                          escapeAscii(ch, scratch, hexdig);
-                          break;
-                        }
-                        ch_len = 1;
-                        // fallthrough
-                    }
-                    default:
-                        pos += ch_len;
-                        break;
+                    break;
                 }
-            } else {
-                pos++;
+                default:
+                    pos += ch_len;
+                    break;
             }
         }
 
@@ -392,6 +387,10 @@ class StringEncoder extends ByteListTranscoder {
 
     protected void append(byte[] origin, int start, int length) throws IOException {
         out.write(origin, start, length);
+    }
+
+    protected void append(byte[] origin) throws IOException {
+        append(origin, 0, origin.length);
     }
 
     @Override
