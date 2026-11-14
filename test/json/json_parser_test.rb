@@ -1095,28 +1095,26 @@ class JSONParserTest < Test::Unit::TestCase
       JSON.parse(fake_string.new("\xff".b, encoding: Encoding::UTF_16))
     end
 
-    if RUBY_ENGINE != "jruby"
-      fake_string = Class.new(String) do
-        attr_reader :encoded_str
+    fake_string = Class.new(String) do
+      attr_reader :encoded_str
 
-        def initialize(...)
-          super
-          @encoded_str = JSON.dump(1000.times.to_a)
-        end
-
-        def encode(*)
-          @encoded_str
-        end
+      def initialize(...)
+        super
+        @encoded_str = JSON.dump(1000.times.to_a)
       end
 
-      fake = fake_string.new("blah", encoding: Encoding::UTF_16)
-      assert_equal 1000.times.to_a, JSON.parse(fake, on_load: ->(v) {
-        if v == 20
-          fake.encoded_str.clear
-        end
-        v
-      })
+      def encode(*)
+        @encoded_str
+      end
     end
+
+    fake = fake_string.new("blah", encoding: Encoding::UTF_16)
+    assert_equal 1000.times.to_a, JSON.parse(fake, on_load: ->(v) {
+      if v == 20
+        fake.encoded_str.clear
+      end
+      v
+    })
   end
 
   private

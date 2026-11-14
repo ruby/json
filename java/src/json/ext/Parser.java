@@ -151,7 +151,10 @@ public class Parser extends RubyObject {
           source.setEncoding(UTF8Encoding.INSTANCE);
           source.clearCodeRange();
       } else if (encoding != UTF8Encoding.INSTANCE) {
-          source = (RubyString) source.encode(context, context.runtime.getEncodingService().convertEncodingToRubyEncoding(UTF8Encoding.INSTANCE));
+          // Dispatch dynamically like rb_funcall in parser.c, so a String subclass overriding #encode is honored,
+          // and a non-String return value raises TypeError instead of a ClassCastException.
+          IRubyObject utf8 = context.runtime.getEncodingService().convertEncodingToRubyEncoding(UTF8Encoding.INSTANCE);
+          source = source.callMethod(context, "encode", utf8).convertToString();
       }
       return source;
     }
