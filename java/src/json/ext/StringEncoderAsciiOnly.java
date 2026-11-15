@@ -57,7 +57,7 @@ final class StringEncoderAsciiOnly extends StringEncoder {
                     break;
                 }
                 case 25: {
-                    if (isUnsafeScriptTag(ptrBytes, pos, len)) {
+                    if (isUnsafeScriptTag(ptrBytes, pos, len, ptr)) {
                         beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
                         escapeAscii(ch, scratch, hexdig);
                     } else {

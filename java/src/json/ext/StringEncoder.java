@@ -273,29 +273,33 @@ class StringEncoder extends ByteListTranscoder {
         }
     }
 
-    protected boolean isUnsafeScriptTag(byte[] ptrBytes, int pos, int len) {
+    protected boolean isUnsafeScriptTag(byte[] ptrBytes, int pos, int len, int ptr) {
       int remaining = len - pos;
 
-      if ((remaining >= 4 && ByteBuffer.wrap(ptrBytes, pos, 4).equals(HTML_COMMENT))) {
+      if (remaining < 4) {
+          return false;
+      }
+
+      if (ByteBuffer.wrap(ptrBytes, ptr + pos, 4).equals(HTML_COMMENT)) {
         return true;
       }
 
       pos++;
       remaining--;
 
-      if (ptrBytes[pos] == '/') {
+      if (ptrBytes[ptr + pos] == '/') {
         pos++;
         remaining--;
       }
 
       return (
           remaining >= 6 &&
-          (ptrBytes[pos + 0] | 0x20) == 's' &&
-          (ptrBytes[pos + 1] | 0x20) == 'c' &&
-          (ptrBytes[pos + 2] | 0x20) == 'r' &&
-          (ptrBytes[pos + 3] | 0x20) == 'i' &&
-          (ptrBytes[pos + 4] | 0x20) == 'p' &&
-          (ptrBytes[pos + 5] | 0x20) == 't'
+          (ptrBytes[ptr + pos + 0] | 0x20) == 's' &&
+          (ptrBytes[ptr + pos + 1] | 0x20) == 'c' &&
+          (ptrBytes[ptr + pos + 2] | 0x20) == 'r' &&
+          (ptrBytes[ptr + pos + 3] | 0x20) == 'i' &&
+          (ptrBytes[ptr + pos + 4] | 0x20) == 'p' &&
+          (ptrBytes[ptr + pos + 5] | 0x20) == 't'
       );
     }
 
@@ -332,7 +336,7 @@ class StringEncoder extends ByteListTranscoder {
                     break;
                 }
                 case 25: {
-                    if (isUnsafeScriptTag(ptrBytes, pos, len)) {
+                    if (isUnsafeScriptTag(ptrBytes, pos, len, ptr)) {
                         beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
                         escapeAscii(ch, scratch, hexdig);
                     } else {
