@@ -251,17 +251,16 @@ class StringEncoder extends ByteListTranscoder {
         byte[] scratch = aux;
 
         byte[] ptrBytes = src.unsafeBytes();
-        int ptr = src.begin();
         int len = src.realSize();
 
-        int beg = 0;
-        int pos = 0;
+        int beg = src.begin();
+        int pos = beg;
 
         while (pos < len) {
-            int ch = Byte.toUnsignedInt(ptrBytes[ptr + pos]);
+            int ch = Byte.toUnsignedInt(ptrBytes[pos]);
             int ch_len = ESCAPE_TABLE[ch];
             if (ch_len > 0) {
-                beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                beg = pos = flushPos(pos, beg, ptrBytes, 1);
                 escapeAscii(ch, scratch, hexdig);
             } else {
                 pos++;
@@ -269,37 +268,37 @@ class StringEncoder extends ByteListTranscoder {
         }
 
         if (beg < len) {
-            append(ptrBytes, ptr + beg, len - beg);
+            append(ptrBytes, beg, len - beg);
         }
     }
 
-    protected boolean isUnsafeScriptTag(byte[] ptrBytes, int pos, int len, int ptr) {
+    protected boolean isUnsafeScriptTag(byte[] ptrBytes, int pos, int len) {
       int remaining = len - pos;
 
       if (remaining < 4) {
           return false;
       }
 
-      if (ByteBuffer.wrap(ptrBytes, ptr + pos, 4).equals(HTML_COMMENT)) {
+      if (ByteBuffer.wrap(ptrBytes, pos, 4).equals(HTML_COMMENT)) {
         return true;
       }
 
       pos++;
       remaining--;
 
-      if (ptrBytes[ptr + pos] == '/') {
+      if (ptrBytes[pos] == '/') {
         pos++;
         remaining--;
       }
 
       return (
           remaining >= 6 &&
-          (ptrBytes[ptr + pos + 0] | 0x20) == 's' &&
-          (ptrBytes[ptr + pos + 1] | 0x20) == 'c' &&
-          (ptrBytes[ptr + pos + 2] | 0x20) == 'r' &&
-          (ptrBytes[ptr + pos + 3] | 0x20) == 'i' &&
-          (ptrBytes[ptr + pos + 4] | 0x20) == 'p' &&
-          (ptrBytes[ptr + pos + 5] | 0x20) == 't'
+          (ptrBytes[pos + 0] | 0x20) == 's' &&
+          (ptrBytes[pos + 1] | 0x20) == 'c' &&
+          (ptrBytes[pos + 2] | 0x20) == 'r' &&
+          (ptrBytes[pos + 3] | 0x20) == 'i' &&
+          (ptrBytes[pos + 4] | 0x20) == 'p' &&
+          (ptrBytes[pos + 5] | 0x20) == 't'
       );
     }
 
@@ -315,14 +314,12 @@ class StringEncoder extends ByteListTranscoder {
         byte[] escapeTable = this.escapeTable;
 
         byte[] ptrBytes = src.unsafeBytes();
-        int ptr = src.begin();
-        int len = src.realSize();
-
-        int beg = 0;
-        int pos = 0;
+        int beg = src.begin();
+        int pos = beg;
+        int len = beg + src.realSize();
 
         while (pos < len) {
-            int ch = Byte.toUnsignedInt(ptrBytes[ptr + pos]);
+            int ch = Byte.toUnsignedInt(ptrBytes[pos]);
             int ch_len = escapeTable[ch];
             /* JSON encoding */
 
@@ -331,13 +328,13 @@ class StringEncoder extends ByteListTranscoder {
                     pos++;
                     break;
                 case 9: {
-                    beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                    beg = pos = flushPos(pos, beg, ptrBytes, 1);
                     escapeAscii(ch, scratch, hexdig);
                     break;
                 }
                 case 25: {
-                    if (isUnsafeScriptTag(ptrBytes, pos, len, ptr)) {
-                        beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                    if (isUnsafeScriptTag(ptrBytes, pos, len)) {
+                        beg = pos = flushPos(pos, beg, ptrBytes, 1);
                         escapeAscii(ch, scratch, hexdig);
                     } else {
                         pos++; // nothing to escape, resume search.
@@ -351,12 +348,12 @@ class StringEncoder extends ByteListTranscoder {
         }
 
         if (beg < len) {
-            append(ptrBytes, ptr + beg, len - beg);
+            append(ptrBytes, beg, len - beg);
         }
     }
 
-    protected int flushPos(int pos, int beg, byte[] ptrBytes, int ptr, int size) throws IOException {
-        if (pos > beg) { append(ptrBytes, ptr + beg, pos - beg); }
+    protected int flushPos(int pos, int beg, byte[] ptrBytes, int size) throws IOException {
+        if (pos > beg) { append(ptrBytes, beg, pos - beg); }
         return pos + size;
     }
 
