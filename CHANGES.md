@@ -150,8 +150,7 @@ Numerous rarely used aliases have been removed.
 
 ### 2026-11-13 (2.18.3)
 
-* Backport handling of unescaped control characters preceeded by a backslash from 2.19.2.
-  GHSA-cjpr-jw2g-fw99.
+* Backport format string injection fix from 2.19.2. `CVE-2026-33210` / GHSA-3m6g-2423-7cp3.
 
 ### 2026-11-02 (2.18.2)
 
