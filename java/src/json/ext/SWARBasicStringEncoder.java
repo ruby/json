@@ -17,30 +17,28 @@ public class SWARBasicStringEncoder extends StringEncoder {
         byte[] scratch = aux;
 
         byte[] ptrBytes = src.unsafeBytes();
-        int ptr = src.begin();
-        int len = src.realSize();
-
-        int beg = 0;
-        int pos = 0;
+        int beg = src.begin();
+        int pos = beg;
+        int len = beg + src.realSize();
 
         // There are optimizations in JRuby where ptr > 0 will be true. For example, if we 
         // slice a string, the underlying byte array is the same, but the
         // begin index and real size are different. When reading from the ptrBytes
         // array, we need to always add ptr to the index.
-        ByteBuffer bb = ByteBuffer.wrap(ptrBytes, 0, ptr + len);
+        ByteBuffer bb = ByteBuffer.wrap(ptrBytes, 0, len);
 
         while (pos + 8 <= len) {
-            long x = bb.getLong(ptr + pos);
+            long x = bb.getLong(pos);
             if (skipChunk(x)) {
                 pos += 8;
                 continue;
             }
-            int chunkEnd = ptr + pos + 8;
-            while (ptr + pos < chunkEnd) {
-                int ch = Byte.toUnsignedInt(ptrBytes[ptr + pos]);
+            int chunkEnd = pos + 8;
+            while (pos < chunkEnd) {
+                int ch = Byte.toUnsignedInt(ptrBytes[pos]);
                 int ch_len = ESCAPE_TABLE[ch];
                 if (ch_len > 0) {
-                    beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                    beg = pos = flushPos(pos, beg, ptrBytes, 1);
                     escapeAscii(ch, scratch, hexdig);
                 } else {
                     pos++;
@@ -49,17 +47,17 @@ public class SWARBasicStringEncoder extends StringEncoder {
         }
 
         if (pos + 4 <= len) {
-            int x = bb.getInt(ptr + pos);
+            int x = bb.getInt(pos);
             if (skipChunk(x)) {
                 pos += 4;
             }
         }
 
         while (pos < len) {
-            int ch = Byte.toUnsignedInt(ptrBytes[ptr + pos]);
+            int ch = Byte.toUnsignedInt(ptrBytes[pos]);
             int ch_len = ESCAPE_TABLE[ch];
             if (ch_len > 0) {
-                beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                beg = pos = flushPos(pos, beg, ptrBytes, 1);
                 escapeAscii(ch, scratch, hexdig);
             } else {
                 pos++;
@@ -67,7 +65,7 @@ public class SWARBasicStringEncoder extends StringEncoder {
         }
 
         if (beg < len) {
-            append(ptrBytes, ptr + beg, len - beg);
+            append(ptrBytes, beg, len - beg);
         }
     }
 
