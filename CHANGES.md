@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+### 2026-11-24 (3.2.0)
+
 * The `script_safe: true` option of `JSON.generate` no longer escapes forward slashes `/`, and instead escapes script tag
   openings (`<script`), script tag closing (`</script`) and HTML comments (`<!--`) as recommended by the HTML spec.
 * The `script_safe: true` option of `JSON.generate` no longer escapes `U+2028` and `U+2029` given that Javascript is
