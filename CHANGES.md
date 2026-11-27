@@ -150,6 +150,11 @@ Numerous rarely used aliases have been removed.
 * Fix `allow_blank` parsing option to no longer allow invalid types (e.g. `load([], allow_blank: true)` now raise a type error).
 * Add `allow_invalid_escape` parsing option to ignore backslashes that aren't followed by one of the valid escape characters.
 
+### 2026-11-27 (2.18.4)
+
+* Backport fix for heap overflow when writing JSON directly into an IO (`JSON.generate(object, io)`).
+  CVE-2026-54696. Backported from 2.19.9.
+
 ### 2026-11-13 (2.18.3)
 
 * Backport format string injection fix from 2.19.2. `CVE-2026-33210` / GHSA-3m6g-2423-7cp3.
