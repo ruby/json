@@ -1067,6 +1067,13 @@ class JSONGeneratorTest < Test::Unit::TestCase
     end
   end
 
+  def test_dump_io_buffering
+    str = "a" * 16385
+    str[16382] = '"'
+    JSON.dump([str], StringIO.new)
+    assert true
+  end
+
   # The case when the State is frozen is tested in JSONCoderTest#test_nesting_recovery
   def test_nesting_recovery
     state = JSON::State.new
