@@ -37,14 +37,13 @@ final class StringEncoderAsciiOnly extends StringEncoder {
         byte[] escapeTable = this.escapeTable;
 
         byte[] ptrBytes = src.unsafeBytes();
-        int ptr = src.begin();
-        int len = src.realSize();
 
-        int beg = 0;
-        int pos = 0;
+        int beg = src.begin();
+        int pos = beg;
+        int len = beg + src.realSize();
 
         while (pos < len) {
-            int ch = Byte.toUnsignedInt(ptrBytes[ptr + pos]);
+            int ch = Byte.toUnsignedInt(ptrBytes[pos]);
             int ch_len = escapeTable[ch];
 
             switch (ch_len) {
@@ -52,13 +51,13 @@ final class StringEncoderAsciiOnly extends StringEncoder {
                     pos++;
                     break;
                 case 9: {
-                    beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                    beg = pos = flushPos(pos, beg, ptrBytes, 1);
                     escapeAscii(ch, scratch, hexdig);
                     break;
                 }
                 case 25: {
-                    if (isUnsafeScriptTag(ptrBytes, pos, len, ptr)) {
-                        beg = pos = flushPos(pos, beg, ptrBytes, ptr, 1);
+                    if (isUnsafeScriptTag(ptrBytes, pos, len)) {
+                        beg = pos = flushPos(pos, beg, ptrBytes, 1);
                         escapeAscii(ch, scratch, hexdig);
                     } else {
                         pos++; // nothing to escape, resume search.
@@ -71,21 +70,21 @@ final class StringEncoderAsciiOnly extends StringEncoder {
 
                     switch(ch_len) {
                         case 2:
-                            wchar = ptrBytes[ptr + pos] & 0x1F;
+                            wchar = ptrBytes[pos] & 0x1F;
                             break;
                         case 3:
-                            wchar = ptrBytes[ptr + pos] & 0x0F;
+                            wchar = ptrBytes[pos] & 0x0F;
                             break;
                         case 4:
-                            wchar = ptrBytes[ptr + pos] & CHAR_LENGTH_MASK;
+                            wchar = ptrBytes[pos] & CHAR_LENGTH_MASK;
                             break;
                     }
 
                     for (short i = 1; i < ch_len; i++) {
-                        wchar = (wchar << 6) | (ptrBytes[ptr + pos +i] & 0x3F);
+                        wchar = (wchar << 6) | (ptrBytes[pos + i] & 0x3F);
                     }
 
-                    beg = pos = flushPos(pos, beg, ptrBytes, ptr, ch_len);
+                    beg = pos = flushPos(pos, beg, ptrBytes, ch_len);
 
                     if (wchar <= 0xFFFF) {
                         scratch[2] = hexdig[wchar >> 12];
@@ -118,7 +117,7 @@ final class StringEncoderAsciiOnly extends StringEncoder {
         }
 
         if (beg < len) {
-            append(ptrBytes, ptr + beg, len - beg);
+            append(ptrBytes, beg, len - beg);
         }
     }
 }
